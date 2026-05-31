@@ -1,0 +1,18 @@
+name = "Narrow"
+uuid = "8ba44b63-25c7-46fd-9fd4-4f4eb27b5063"
+version = "0.1.0"
+authors = ["AntonOresten <antonoresten@proton.me>"]
+
+[deps]
+Republic = "27243419-9dde-4721-b67c-fd63626fea7f"
+StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
+
+[weakdeps]
+Microfloats = "31c70f10-a750-4521-b13c-797315ae2933"
+
+[extensions]
+MicrofloatsExt = "Microfloats"
+
+[compat]
+Republic = "2.2.0"
+StaticArrays = "1.9.18"
