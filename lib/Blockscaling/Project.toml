@@ -2,3 +2,9 @@ name = "Blockscaling"
 uuid = "b06fe897-32ea-4c28-9f72-27b21bb59e91"
 version = "0.1.0"
 authors = ["AntonOresten <antonoresten@proton.me>"]
+
+[deps]
+Einops = "e3ce28c8-8bfb-4704-8add-e3e7f14b55c9"
+
+[compat]
+Einops = "0.2.0"

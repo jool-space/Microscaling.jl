@@ -6,8 +6,8 @@ module Microscaling using Republic
 
 include("ScaleArray.jl")
 export ScaleArray
-public Dense, Sm1xx
-public relayout
+export Dense, Sm1xx
+export relayout
 
 # DenseBlockscaledArray?
 

@@ -64,17 +64,18 @@ relayout(layout::ScaleLayout, s::AbstractArray) = relayout(layout, ScaleArray(s)
 using Einops: @rearrange
 
 function relayout(layout::Sm1xx, s::ScaleArray{Dense})
+    (; k1, m2, m1) = sizes(layout)
     ndims(s) >= 2 || throw(ArgumentError("Dense array must have at least 2 dimensions to be converted to Sm1xx"))
     size(s, 1) >= k1 && size(s, 2) >= m1 * m2 || throw(ArgumentError("Size of Dense array must be (>$k1, >$(m1*m2), ...)"))
     x = parent(s)
-    x′ = @rearrange(x, "(k1 k0) (m1 m2 m0) ... -> k1 m2 m1 k0 m0 ..."; sizes(layout)...)
+    x′ = @rearrange(x, "(k1 k0) (m1 m2 m0) ... -> k1 m2 m1 k0 m0 ..."; k1, m2, m1)
     s′ = ScaleArray(layout, x′)
     return s′
 end
 
 function relayout(layout::Dense, s::ScaleArray{Sm1xx})
     x = parent(s)
-    x′ = @rearrange(x, "k1 m2 m1 k0 m0 ... -> (k1 k0) (m1 m2 m0) ..."; sizes(layout)...)
+    x′ = @rearrange(x, "k1 m2 m1 k0 m0 ... -> (k1 k0) (m1 m2 m0) ..."; sizes(s.layout)...)
     s′ = ScaleArray(layout, x′)
     return s′
 end
@@ -83,4 +84,6 @@ end
 
 Base.broadcastable(s::ScaleArray{Dense}) = Base.broadcastable(parent(s))
 
-Base.broadcastable(s::ScaleArray{Sm1xx}) = Base.broadcastable(relayout(Dense(), s))
+Base.broadcastable(s::ScaleArray) = Base.broadcastable(relayout(Dense(), s))
+
+Base.print_array(io::IO, s::ScaleArray) = Base.print_array(io, Base.broadcastable(s))

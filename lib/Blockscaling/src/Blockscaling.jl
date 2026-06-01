@@ -80,4 +80,18 @@ end
 const BlockscaledVector{T} = BlockscaledArray{T,1}
 const BlockscaledMatrix{T} = BlockscaledArray{T,2}
 
+
+### Broadcasting
+
+using Einops: @rearrange
+
+function Base.broadcastable(arr::BlockscaledArray{T,N,1}) where {T,N}
+    x_singleton = @rearrange(Base.broadcastable(arr.x), "k ... -> 1 k ...")
+    p_block     = @rearrange(Base.broadcastable(arr.p), "(b k) ... -> b k ... "; b=block_size(arr))
+    v = @rearrange(T.(x_singleton) .* T.(p_block), "b k ... -> (b k) ...")
+    return v
+end
+
+Base.print_array(io::IO, arr::BlockscaledArray) = Base.print_array(io, Base.broadcastable(arr))
+
 end
