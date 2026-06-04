@@ -1,6 +1,4 @@
-using Microscaling
-using Test
+#using Microscaling
 
-@testset "Microscaling.jl" begin
-    # Write your tests here.
-end
+include("general-gemm.jl")
+#include("mxfp8-gemm.jl")

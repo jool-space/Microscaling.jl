@@ -4,12 +4,8 @@ module Microscaling using Republic
 @reexport using Microfloats
 @reexport using Blockscaling
 
-include("ScaleArray.jl")
-export ScaleArray
-export Dense, Sm1xx
-export relayout
-
-# DenseBlockscaledArray?
+include("Sm1xxArray.jl")
+export Sm1xxArray, sm1xx
 
 const ColMajorBlockscaledMatrix{T,A<:BlockscaledMatrix{T,1}} = Union{PermutedDimsArray{T,2,(1,2),(1,2),A}, BlockscaledMatrix{T,1}}
 const RowMajorBlockscaledMatrix{T,A<:BlockscaledMatrix{T,1}} = PermutedDimsArray{T,2,(2,1),(2,1),A}

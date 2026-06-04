@@ -1,10 +1,17 @@
 name = "Blockscaling"
-uuid = "b06fe897-32ea-4c28-9f72-27b21bb59e91"
+uuid = "5f9d68f8-3317-4889-b94e-9864db091e9f"
 version = "0.1.0"
 authors = ["AntonOresten <antonoresten@proton.me>"]
 
 [deps]
+Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
 Einops = "e3ce28c8-8bfb-4704-8add-e3e7f14b55c9"
 
+[weakdeps]
+cuTile = "0dea8319-8c4a-4662-a73d-20234d115b9a"
+
+[extensions]
+cuTileExt = "cuTile"
+
 [compat]
-Einops = "0.2.0"
+cuTile = "0.3.0"

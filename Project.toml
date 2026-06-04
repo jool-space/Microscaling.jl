@@ -7,21 +7,23 @@ authors = ["AntonOresten <antonoresten@proton.me> and contributors"]
 projects = ["test", "docs", "lib/Narrow", "lib/Blockscaling"]
 
 [deps]
-Blockscaling = "b06fe897-32ea-4c28-9f72-27b21bb59e91"
-CUDACore = "bd0ed864-bdfe-4181-a5ed-ce625a5fdea2"
+Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
+Blockscaling = "5f9d68f8-3317-4889-b94e-9864db091e9f"
 Einops = "e3ce28c8-8bfb-4704-8add-e3e7f14b55c9"
 Microfloats = "31c70f10-a750-4521-b13c-797315ae2933"
 Narrow = "8ba44b63-25c7-46fd-9fd4-4f4eb27b5063"
 Republic = "27243419-9dde-4721-b67c-fd63626fea7f"
+
+[weakdeps]
 cuTile = "0dea8319-8c4a-4662-a73d-20234d115b9a"
 
+[extensions]
+cuTileExt = "cuTile"
+
 [compat]
-CUDACore = "6.1.1"
+Adapt = "4.6.0"
 Einops = "0.2"
 Microfloats = "0.2.1"
 Republic = "2.2"
 cuTile = "0.3.0"
 julia = "1.11"
-
-[sources]
-cuTile = {url="https://github.com/AntonOresten/cuTile.jl", rev="mma-scaled"}

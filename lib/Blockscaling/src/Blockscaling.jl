@@ -5,7 +5,6 @@ export BlockscaledArray, BlockscaledVector, BlockscaledMatrix
 public element_type, scale_type, block_size, block_dim
 
 struct BlockscalingFormat{K,Scale<:Number,Element<:Number}
-    block_size::Val{K}
     BlockscalingFormat(K::Int, S::Type, E::Type) = new{K, S, E}()
 end
 
@@ -59,7 +58,7 @@ function BlockscaledArray(f::BlockscalingFormat, args...; kws...)
 end
 
 Base.size(arr::BlockscaledArray, args...) = size(arr.p, args...)
-block_dim(::BlockscaledArray{N,BD}) where {N,BD} = BD
+block_dim(::BlockscaledArray{T,N,BD}) where {T,N,BD} = BD
 block_size(arr::BlockscaledArray) = block_size(arr.format)
 scale_type(arr::BlockscaledArray) = scale_type(arr.format)
 element_type(arr::BlockscaledArray) = element_type(arr.format)
