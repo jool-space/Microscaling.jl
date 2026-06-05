@@ -2,6 +2,11 @@ struct PackedArray{T,N,E<:NarrowArray{T},A<:DenseArray{E,N}} <: AbstractArray{T,
     parent::A
 end
 
+pack_count(::Type{T}) where T = 8 ÷ gcd(bitwidth(T), 8)
+function PackedArray{T}(arr::AbstractArray{T}) where T
+    return PackedArray(NarrowVector.(reinterpret(NTuple{pack_count(T),T}, arr)))
+end
+
 const PackedVector{T} = PackedArray{T,1}
 const PackedMatrix{T} = PackedArray{T,2}
 

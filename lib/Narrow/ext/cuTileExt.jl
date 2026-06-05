@@ -7,18 +7,22 @@ using cuTile: KernelAdaptor, TileArray
 using Adapt: Adapt, adapt
 
 struct ReinterpretTileArray{T,N,A<:TileArray{UInt8,N}}
+    eltype::Val{T}
     parent::A
-end
-
-function ReinterpretTileArray{T}(parent::A) where {T,N,A<:TileArray{UInt8,N}}
-    return ReinterpretTileArray{T,N,A}(parent)
 end
 
 Base.eltype(::ReinterpretTileArray{T}) where T = T
 Base.ndims(::ReinterpretTileArray{T,N}) where {T,N} = N
 
+function Base.size(arr::ReinterpretTileArray{T,N}, i::Integer) where {T,N}
+    ratio = 8 ÷ ct.bitwidth(T)
+    return i == 1 ? size(arr.parent, i) * ratio : size(arr.parent, i)
+end
+Base.size(arr::ReinterpretTileArray{T,N}) where {T,N} = ntuple(i -> size(arr, i), Val(N))
+
 function Adapt.adapt_storage(to::KernelAdaptor, arr::PackedArray)
-    return ReinterpretTileArray{T}(
+    return ReinterpretTileArray(
+        Val(eltype(arr)),
         Adapt.adapt_storage(to, reinterpret(UInt8, arr))
     )
 end

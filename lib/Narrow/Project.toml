@@ -17,6 +17,7 @@ MicrofloatsExt = "Microfloats"
 cuTileExt = "cuTile"
 
 [compat]
+Adapt = "4.6.0"
 Republic = "2.2.0"
 StaticArrays = "1.9.18"
 cuTile = "0.3.0"

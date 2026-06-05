@@ -32,7 +32,6 @@ function ct.load(
     index, shape;
     kws...
 )
-    print("hi")
     k1, m2, m1 = 4, 4, 32
     shape′ = (
         k1 * m2 * m1,
