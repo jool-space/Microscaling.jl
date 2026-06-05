@@ -11,7 +11,9 @@ function blockscaled_gemm_reference(x_data, x_scale, y_data, y_scale, block_size
     return transpose(dqX) * dqY
 end
 
-@testset "Microscaling.jl" if CUDA.functional()
-    include("gemm_agnostic.jl")
-    include("gemm_mxfp8.jl")
+@testset "Microscaling.jl" begin
+    if CUDA.functional()
+        include("gemm_agnostic.jl")
+        include("gemm_mxfp8.jl")
+    end
 end
