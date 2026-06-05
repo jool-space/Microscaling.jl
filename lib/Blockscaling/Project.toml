@@ -14,4 +14,6 @@ cuTile = "0dea8319-8c4a-4662-a73d-20234d115b9a"
 cuTileExt = "cuTile"
 
 [compat]
+Adapt = "4.6.0"
+Einops = "0.2.1"
 cuTile = "0.3.0"
