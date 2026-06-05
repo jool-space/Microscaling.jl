@@ -8,3 +8,6 @@ cuTile = "0dea8319-8c4a-4662-a73d-20234d115b9a"
 
 [sources]
 cuTile = {rev = "main", url = "https://github.com/JuliaGPU/cuTile.jl"}
+
+[compat]
+CUDA = "6.1.0"
