@@ -20,6 +20,10 @@ cuTile = "0dea8319-8c4a-4662-a73d-20234d115b9a"
 [extensions]
 cuTileExt = "cuTile"
 
+[sources]
+Blockscaling = {path = "../lib/Blockscaling"}
+Narrow = {path = "../lib/Narrow"}
+
 [compat]
 Adapt = "4.6.0"
 Einops = "0.2.1"
