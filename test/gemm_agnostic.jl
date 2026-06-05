@@ -1,19 +1,6 @@
-using Microscaling
-
-import cuTile as ct
-
-using CUDA
 using Einops: @rearrange
-using Random, Test
 
-function blockscaled_gemm_reference(x_data, x_scale, y_data, y_scale, block_size)
-    expand(s) = repeat(s, inner = (block_size, 1))
-    dqX = Float32.(x_data) .* Float32.(expand(x_scale))
-    dqY = Float32.(y_data) .* Float32.(expand(y_scale))
-    return transpose(dqX) * dqY
-end
-
-function mxfp8_gemm_wrapper(X, Y, Z, TM::Int, TN::Int, TK::Int)
+function gemm_agnostic(X, Y, Z, TM::Int, TN::Int, TK::Int)
     i, j = ct.bid(1), ct.bid(2)
     num_k = cld(size(X, 1), TK)
     z = zeros(Float32, (TM, TN))
@@ -29,7 +16,7 @@ end
 @testset "MXFP8 GEMM — BlockscaledArray wrapper" begin
     Random.seed!(0)
 
-    Scale   = Float8_E8M0FNU
+    Scale = Float8_E8M0FNU
     Element = Float8_E4M3FN
     block_size = 32
     M, N, K = 256, 384, 512
@@ -45,11 +32,11 @@ end
 
     Z_ref = blockscaled_gemm_reference(x_data, x_scale, y_data, y_scale, block_size)
 
-    X = BlockscaledArray(format, sm1xx(CuArray(x_scale)), CuArray(x_data))
-    Y = BlockscaledArray(format, sm1xx(CuArray(y_scale)), CuArray(y_data))
+    X = BlockscaledArray(format, (CuArray(x_scale)), CuArray(x_data))
+    Y = BlockscaledArray(format, (CuArray(y_scale)), CuArray(y_data))
     Z = CUDA.zeros(Float32, M, N)
 
-    CUDA.@sync @cuda backend=ct blocks=(cld(M, TM), cld(N, TN)) mxfp8_gemm_wrapper(
+    CUDA.@sync @cuda backend=ct blocks=(cld(M, TM), cld(N, TN)) gemm_agnostic(
         X, Y, Z, ct.Constant(TM), ct.Constant(TN), ct.Constant(TK),
     )
 

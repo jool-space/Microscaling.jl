@@ -1,14 +1,3 @@
-# MXFP8 GEMM with hand-written scale swizzling — no wrapper types, the scale
-# tile is unswizzled explicitly in the kernel. This is the path that's known to
-# work; the wrapper version (general-gemm.jl) is expected to match it.
-
-function blockscaled_gemm_reference(x_data, x_scale, y_data, y_scale, block_size)
-    expand(s) = repeat(s, inner = (block_size, 1))
-    dqX = Float32.(x_data) .* Float32.(expand(x_scale))
-    dqY = Float32.(y_data) .* Float32.(expand(y_scale))
-    return transpose(dqX) * dqY
-end
-
 using Einops: @rearrange
 
 const k1 = 4
@@ -17,7 +6,7 @@ const m1 = 32
 
 unswizzle_4_4_32(tile) = @rearrange(tile, "(k1 m2 m1) k0 m0 -> (k1 k0) (m1 m2 m0)"; k1, m2)
 
-function mxfp8_gemm_manual(X, X_scale, Y, Y_scale, Z, TM::Int, TN::Int, TK::Int)
+function gemm_mxfp8(X, X_scale, Y, Y_scale, Z, TM::Int, TN::Int, TK::Int)
     i, j = ct.bid(1), ct.bid(2)
     num_k = cld(size(X, 1), TK)
     z = zeros(Float32, (TM, TN))
@@ -55,7 +44,7 @@ end
     Y = BlockscaledArray(format, sm1xx(CuArray(y_scale)), CuArray(y_data))
     Z = CUDA.zeros(Float32, M, N)
 
-    CUDA.@sync @cuda backend=ct blocks=(cld(M, TM), cld(N, TN)) mxfp8_gemm_manual(
+    CUDA.@sync @cuda backend=ct blocks=(cld(M, TM), cld(N, TN)) gemm_mxfp8(
         X.p,
         @rearrange(X.x.x, "k1 m2 m1 k0 m0 -> (k1 m2 m1) k0 m0"),
         Y.p,

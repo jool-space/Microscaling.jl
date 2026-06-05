@@ -22,7 +22,7 @@ cuTileExt = "cuTile"
 
 [compat]
 Adapt = "4.6.0"
-Einops = "0.2"
+Einops = "0.2.1"
 Microfloats = "0.2.1"
 Republic = "2.2"
 cuTile = "0.3.0"
