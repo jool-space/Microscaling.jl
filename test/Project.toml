@@ -11,7 +11,7 @@ cuTile = "0dea8319-8c4a-4662-a73d-20234d115b9a"
 [sources]
 Blockscaling = {path = "../lib/Blockscaling"}
 Narrow = {path = "../lib/Narrow"}
-cuTile = {rev = "main", url = "https://github.com/JuliaGPU/cuTile.jl"}
+cuTile = {rev = "ao/codecov", url = "https://github.com/JuliaGPU/cuTile.jl"}
 
 [compat]
 CUDA = "6"
