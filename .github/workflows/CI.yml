@@ -72,6 +72,8 @@ jobs:
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1
       - uses: julia-actions/julia-processcoverage@v1
+        with:
+          directories: src,ext,lib/Blockscaling/src,lib/Blockscaling/ext,lib/Narrow/src,lib/Narrow/ext
       - uses: codecov/codecov-action@v7
         with:
           files: lcov.info
