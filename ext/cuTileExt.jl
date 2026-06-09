@@ -44,4 +44,14 @@ function ct.load(
     return tile
 end
 
+function ct.store(
+    arr::Sm1xxTileArray,
+    index, tile;
+    kws...
+)
+    k1, m2, m1 = 4, 4, 32
+    tile′ = @rearrange(tile, "(k1 k0) (m1 m2 m0) ... -> (k1 m2 m1) k0 m0 ..."; k1, m2, m1)
+    return ct.store(parent(arr), (1, index...), tile′; kws...)
+end
+
 end

@@ -27,6 +27,10 @@ function Adapt.adapt_storage(to::KernelAdaptor, arr::PackedArray)
     )
 end
 
+function ct.store(arr::ReinterpretTileArray{T,N}, index, tile; kws...) where {T,N}
+    return ct.store(arr.parent, index, reinterpret(UInt8, tile); kws...)
+end
+
 function ct.load(
     arr::ReinterpretTileArray{T,N},
     index, shape; kws...
