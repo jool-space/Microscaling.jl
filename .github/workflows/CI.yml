@@ -45,6 +45,35 @@ jobs:
           files: lcov.info
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
+  test-gpu:
+    name: Julia ${{ matrix.version }} - Blackwell GPU tests
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: [self-hosted, ARM64, blackwell]
+    timeout-minutes: 60
+    permissions:
+      actions: write    # for julia-actions/cache to prune its own caches
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        version:
+          - '1.11'
+          - '1.12'
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Verify GPU is visible
+        run: nvidia-smi
+
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: ${{ matrix.version }}
+          arch: aarch64
+
+      - uses: julia-actions/cache@v3
+      - uses: julia-actions/julia-buildpkg@v1
+      - uses: julia-actions/julia-runtest@v1
+
   docs:
     name: Documentation
     runs-on: ubuntu-latest
