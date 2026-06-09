@@ -19,5 +19,7 @@ makedocs(;
 
 deploydocs(;
     repo="github.com/jool-space/Microscaling.jl",
+    deploy_repo="github.com/jool-space/docs",
     devbranch="main",
+    dirname="Microscaling.jl",
 )
