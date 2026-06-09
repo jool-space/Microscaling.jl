@@ -1,4 +1,6 @@
-module Microscaling using Republic
+module Microscaling
+
+using Republic
 
 @reexport using Narrow
 @reexport using Microfloats
