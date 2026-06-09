@@ -8,7 +8,7 @@ makedocs(;
     authors="AntonOresten <antonoresten@proton.me> and contributors",
     sitename="Microscaling.jl",
     format=Documenter.HTML(;
-        canonical="https://jool-space.github.io/Microscaling.jl",
+        canonical="https://docs.jool.space/Microscaling.jl",
         edit_link="main",
         assets=String[],
     ),
