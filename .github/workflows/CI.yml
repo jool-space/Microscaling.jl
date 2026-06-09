@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
 jobs:
   test:
-    name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }}
+    name: Julia ${{ matrix.version }} - ${{ matrix.arch }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     permissions: # needed to allow julia-actions/cache to proactively delete old caches that it has created
@@ -25,7 +25,6 @@ jobs:
         version:
           - '1.11'
           - '1.12'
-          - 'pre'
         os:
           - ubuntu-latest
         arch:
@@ -46,34 +45,29 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
   test-gpu:
-    name: Julia ${{ matrix.version }} - Blackwell GPU tests
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
-    runs-on: [self-hosted, ARM64, blackwell]
+    name: Julia ${{ matrix.version }} - ${{ matrix.arch }} - blackwell
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     permissions:
-      actions: write    # for julia-actions/cache to prune its own caches
+      actions: write
       contents: read
     strategy:
       fail-fast: false
       matrix:
-        version:
-          - '1.11'
-          - '1.12'
+        include:
+          - version: '1.12'
+            runner: [self-hosted, ARM64, blackwell]
+            arch: aarch64
     steps:
       - uses: actions/checkout@v6
-
       - name: Verify GPU is visible
         run: nvidia-smi
-
       - uses: julia-actions/setup-julia@v3
         with:
           version: ${{ matrix.version }}
-          arch: aarch64
-
-      - uses: julia-actions/cache@v3
+          arch: ${{ matrix.arch }}
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1
-
   docs:
     name: Documentation
     runs-on: ubuntu-latest
