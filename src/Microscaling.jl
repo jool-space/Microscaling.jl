@@ -2,14 +2,13 @@ module Microscaling
 
 using Republic
 
+include("blockscaling.jl")
+
 @reexport using Narrow
 @reexport using Microfloats
-@reexport using Blockscaling
+@reexport using .Blockscaling
 
-include("Sm1xxArray.jl")
+include("sm1xx.jl")
 export Sm1xxArray, sm1xx
-
-const ColMajorBlockscaledMatrix{T,A<:BlockscaledMatrix{T,1}} = Union{PermutedDimsArray{T,2,(1,2),(1,2),A}, BlockscaledMatrix{T,1}}
-const RowMajorBlockscaledMatrix{T,A<:BlockscaledMatrix{T,1}} = PermutedDimsArray{T,2,(2,1),(2,1),A}
 
 end

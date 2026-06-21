@@ -25,7 +25,6 @@ end
 Base.IndexStyle(::Type{<:Sm1xxArray}) = IndexCartesian()
 function Base.getindex(s::Sm1xxArray{T,N}, i::Vararg{Int,N}) where {T,N}
     @boundscheck checkbounds(s, i...)
-    (; m1, m2, k1) = Sm1xx_sizes
     k, m, rest... = i
 
     k0i, k1i = fldmod1(k, k1)

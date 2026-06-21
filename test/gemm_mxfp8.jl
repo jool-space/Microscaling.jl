@@ -18,7 +18,7 @@ function gemm_mxfp8(X, X_scale, Y, Y_scale, Z, TM::Int, TN::Int, TK::Int)
         z = ct.muladd_scaled(x, transpose(x_s), y, y_s, z)
     end
     ct.store(Z, (i, j), z)
-    return nothing
+    return
 end
 
 @testset "MXFP8 GEMM — manual swizzle" begin
@@ -31,8 +31,6 @@ end
     K_s = K ÷ block_size
     TM, TN, TK = 128, 128, 128
 
-    format = BlockscalingFormat(block_size, Scale, Element)
-
     x_data  = Element.(randn(K, M))
     y_data  = Element.(randn(K, N))
     x_scale = Scale.(rand(K_s, M))
@@ -40,8 +38,8 @@ end
 
     Z_ref = blockscaled_gemm_reference(x_data, x_scale, y_data, y_scale, block_size)
 
-    X = BlockscaledArray(format, sm1xx(CuArray(x_scale)), CuArray(x_data))
-    Y = BlockscaledArray(format, sm1xx(CuArray(y_scale)), CuArray(y_data))
+    X = BlockscaledArray(sm1xx(CuArray(x_scale)), CuArray(x_data))
+    Y = BlockscaledArray(sm1xx(CuArray(y_scale)), CuArray(y_data))
     Z = CUDA.zeros(Float32, M, N)
 
     CUDA.@sync @cuda backend=ct blocks=(cld(M, TM), cld(N, TN)) gemm_mxfp8(

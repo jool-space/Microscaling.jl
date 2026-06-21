@@ -10,7 +10,7 @@ function gemm_agnostic(X, Y, Z, TM::Int, TN::Int, TK::Int)
         z = muladd(transpose(x), y, z)
     end
     ct.store(Z, (i, j), z)
-    return nothing
+    return
 end
 
 Random.seed!(1)
@@ -28,7 +28,6 @@ Random.seed!(1)
              scale_wrapper in (identity, sm1xx)
 
     K_s = K ÷ block_size
-    format = BlockscalingFormat(block_size, Scale, Element)
 
     x_data  = Element.(randn(K, M))
     y_data  = Element.(randn(K, N))
@@ -48,8 +47,8 @@ Random.seed!(1)
         Y_elements = CuArray(y_data)
     end
 
-    X = BlockscaledArray(format, X_scales, X_elements)
-    Y = BlockscaledArray(format, Y_scales, Y_elements)
+    X = BlockscaledArray(X_scales, X_elements)
+    Y = BlockscaledArray(Y_scales, Y_elements)
     Z = CUDA.zeros(Float32, M, N)
 
     CUDA.@sync @cuda backend=ct blocks=(cld(M, TM), cld(N, TN)) gemm_agnostic(
