@@ -11,37 +11,43 @@ struct BlockscaledArray{
     p::P
 end
 
-function BlockscaledArray{T,N,K}(
-    x::X,
-    p::P
-) where {
+function BlockscaledArray{T,N,K}(x::X, p::P) where {
     T<:Number, N, K<:NTuple{N,Any},
-    X<:AbstractArray{<:Number,N}, P<:AbstractArray{<:Number,N},
+    X<:AbstractArray{<:Number,N}, P<:AbstractArray{<:Number,N}
 }
     return BlockscaledArray{T,N,K,X,P}(x, p)
 end
 
+function validate_block_size(block_size, x_size, p_size)
+    for (i, (k, xs, ps)) in enumerate(zip(block_size, x_size, p_size))
+        if k === 1
+            xs == ps || throw(DimensionMismatch(
+                "Expected number of scale values ($xs) and element values ($ps) to match along dimension $i, for block size of $k."))
+        elseif k isa Colon
+            isone(xs) || throw(DimensionMismatch(
+                "Expected only one dimension-wide scale value along dimension $i, got $xs."))
+        else
+            @assert k isa Int
+            k * xs == ps || throw(DimensionMismatch(
+                "Expected number of scale values ($xs) times block size along dimension $i ($k) to be equal to the number of element values ($ps)."))
+        end
+    end
+end
+
 function BlockscaledArray{T}(
-    block_size::Dims{N},
     x::AbstractArray{<:Number,N},
-    p::AbstractArray{<:Number,N}
+    p::AbstractArray{<:Number,N},
+    block_size::NTuple{N,Union{Int,Colon}} = ntuple(i -> size(p, i) ÷ size(x, i), Val(N))
 ) where {T,N}
+    validate_block_size(block_size, size(x), size(p))
     K = Tuple{block_size...}
     return BlockscaledArray{T,N,K}(x, p)
 end
 
-function BlockscaledArray{T}(
-    x::AbstractArray{<:Number,N},
-    p::AbstractArray{<:Number,N}
-) where {T,N}
-    block_size = ntuple(i -> size(p, i) ÷ size(x, i), Val(N))
-    return BlockscaledArray{T}(block_size, x, p)
-end
-
-function BlockscaledArray(x::AbstractArray, p::AbstractArray)
+function BlockscaledArray(x::AbstractArray, p::AbstractArray, args...; kws...)
     T = promote_type(eltype(x), eltype(p))
     isabstracttype(T) && (T = Float32)
-    return BlockscaledArray{T}(x, p)
+    return BlockscaledArray{T}(x, p, args...; kws...)
 end
 
 Base.size(arr::BlockscaledArray, args...) = size(arr.p, args...)
@@ -56,7 +62,13 @@ function Base.getindex(arr::BlockscaledArray{T,N}, i::Vararg{Int,N}) where {T,N}
     iₚ = i
     iₓ = ntuple(Val(N)) do j
         k = block_size(arr, j)
-        isone(k) ? i[j] : fld1(i[j], k)
+        if k === 1
+            i[j]
+        elseif k isa Colon
+            1
+        else
+            fld1(i[j], k)
+        end
     end
     element = arr.p[iₚ...]
     scale = arr.x[iₓ...]
@@ -71,7 +83,11 @@ using Rewrap
 
 function Base.copy(arr::BlockscaledArray{T,N}) where {T,N}
     x_singleton = reshape(copy(arr.x), ntuple(i -> isodd(i) ? Unsqueeze() : Keep(), Val(2N)))
-    p_block     = reshape(copy(arr.p), ntuple(i -> Split(1, (block_size(arr, i), :)), Val(N)))
+    p_shape = ntuple(Val(N)) do i
+        k = block_size(arr, i)
+        Split(1, k isa Colon ? (:, 1) : (k, :))
+    end
+    p_block     = reshape(copy(arr.p), p_shape)
     v = T.(x_singleton) .* T.(p_block)
     return reshape(v, ntuple(Returns(Merge(2)), Val(N)))
 end
