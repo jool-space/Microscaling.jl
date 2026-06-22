@@ -1,7 +1,3 @@
-module cuTileExt
-
-using Narrow
-
 import cuTile as ct
 using cuTile: KernelAdaptor, TileArray
 using Adapt: Adapt, adapt
@@ -42,6 +38,4 @@ function ct.load(
     byte_tile = ct.load(arr.parent, index, shape′; kws...)
     tile = reinterpret(T, byte_tile)
     return tile
-end
-
 end

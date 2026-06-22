@@ -4,7 +4,7 @@ export BlockscaledArray, BlockscaledVector, BlockscaledMatrix
 public block_size, scale_type, element_type
 
 struct BlockscaledArray{
-    T<:Number, N, K<:Tuple,
+    T<:Number, N, K<:NTuple{N,Any},
     X<:AbstractArray{<:Number,N}, P<:AbstractArray{<:Number,N},
 } <: AbstractArray{T,N}
     x::X
@@ -15,7 +15,7 @@ function BlockscaledArray{T,N,K}(
     x::X,
     p::P
 ) where {
-    T<:Number, N, K<:Tuple,
+    T<:Number, N, K<:NTuple{N,Any},
     X<:AbstractArray{<:Number,N}, P<:AbstractArray{<:Number,N},
 }
     return BlockscaledArray{T,N,K,X,P}(x, p)

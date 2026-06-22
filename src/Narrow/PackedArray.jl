@@ -30,8 +30,10 @@ function Base.reinterpret(::Type{T}, arr::PackedArray) where T
     return reinterpret(T, parent(arr))
 end
 
-function Broadcast.broadcastable(arr::PackedArray{T,<:Any,<:NarrowVector}) where T
+function Base.copy(arr::PackedArray{T,<:Any,<:NarrowVector}) where T
     return reinterpret(T, map(SArray, parent(arr)))
 end
+
+Broadcast.broadcastable(arr::PackedArray) = copy(arr)
 
 Base.print_array(io::IO, arr::PackedArray) = Base.print_array(io, Base.broadcastable(arr))
