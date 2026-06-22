@@ -10,9 +10,11 @@ module cuBLASExt
 
 using LinearAlgebra: LinearAlgebra, Transpose
 
-using Microscaling: Sm1xxArray, PackedArray,
-    Float8_E4M3FN, Float8_E5M2, Float4_E2M1FN, Float8_E8M0FNU
-using Microscaling.Blockscaling: BlockscaledArray, block_size, scale_type, element_type
+using Microscaling:
+    Sm1xxArray, PackedArray,
+    Float8_E4M3FN, Float8_E5M2, Float4_E2M1FN, Float8_E8M0FNU,
+    BlockscaledArray, BlockscaledVector, BlockscaledMatrix,
+    block_size, scale_type, element_type
 
 using CUDACore: CUDACore, CuArray, CuMatrix, CuPtr, cudaDataType,
     R_8F_E4M3, R_8F_E5M2, R_4F_E2M1
@@ -29,6 +31,8 @@ using cuBLAS: cublasLtHandle_t, cublasLtCreate,
     CUBLASLT_MATMUL_DESC_A_SCALE_POINTER, CUBLASLT_MATMUL_DESC_B_SCALE_POINTER,
     CUBLASLT_MATMUL_DESC_A_SCALE_MODE, CUBLASLT_MATMUL_DESC_B_SCALE_MODE,
     CUBLASLT_MATMUL_MATRIX_SCALE_VEC32_UE8M0, CUBLASLT_MATMUL_MATRIX_SCALE_VEC16_UE4M3,
+    CUBLASLT_MATMUL_MATRIX_SCALE_SCALAR_32F,
+    CUBLASLT_MATMUL_MATRIX_SCALE_VEC128_32F, CUBLASLT_MATMUL_MATRIX_SCALE_BLK128x128_32F,
     CUBLASLT_MATMUL_PREF_MAX_WORKSPACE_BYTES,
     CUBLASLT_POINTER_MODE_HOST, CUBLASLT_POINTER_MODE_DEVICE
 
@@ -58,23 +62,33 @@ Base.convert(::Type{cudaDataType}, ::Type{Float8_E4M3FN}) = R_8F_E4M3
 Base.convert(::Type{cudaDataType}, ::Type{Float8_E5M2})   = R_8F_E5M2
 Base.convert(::Type{cudaDataType}, ::Type{Float4_E2M1FN}) = R_4F_E2M1
 
-# block size (over the contraction dim) + scale element -> cuBLASLt scale mode
-function scale_mode(block::Integer, ::Type{Float8_E8M0FNU})
-    block == 32 || throw(ArgumentError("UE8M0 scales expect 32-element blocks, got $block"))
+# block size + scale element -> cuBLASLt scale mode
+function scale_mode(A::BlockscaledMatrix)
+    _scale_mode(block_size(A, 1), block_size(A, 2), scale_type(A))
+end
+function _scale_mode(k::Integer, m::Integer, ::Type{Float8_E8M0FNU})
+    k == 32 && m == 1 || throw(ArgumentError("UE8M0 scales expect (32,1) blocks, got ($k,$m)"))
     return CUBLASLT_MATMUL_MATRIX_SCALE_VEC32_UE8M0
 end
-function scale_mode(block::Integer, ::Type{Float8_E4M3FN})
-    block == 16 || throw(ArgumentError("UE4M3 scales expect 16-element blocks, got $block"))
+function _scale_mode(k::Integer, m::Integer, ::Type{Float8_E4M3FN})
+    k == 16 && m == 1 || throw(ArgumentError("UE4M3 scales expect (16,1) blocks, got ($k,$m)"))
     return CUBLASLT_MATMUL_MATRIX_SCALE_VEC16_UE4M3
 end
-
-# the contraction-dim block size of a K-major (K×N) blockscaled operand
-contraction_block(A::BlockscaledArray{<:Any,2}) = block_size(A, 1)
+function _scale_mode(k::Integer, m::Integer, ::Type{Float32})
+    k == 128 || throw(ArgumentError("Float32 scales expect k=128, got $k"))
+    m == 1   && return CUBLASLT_MATMUL_MATRIX_SCALE_VEC128_32F
+    m == 128 && return CUBLASLT_MATMUL_MATRIX_SCALE_BLK128x128_32F
+    throw(ArgumentError("Float32 scales expect m=1 or m=128, got $m"))
+end
+function _scale_mode(::Colon, ::Colon, ::Type{Float32})
+    return CUBLASLT_MATMUL_MATRIX_SCALE_SCALAR_32F
+end
 
 cvoidptr(x) = reinterpret(CuPtr{Cvoid}, pointer(x))
 cvoidptr(x::PackedArray) = cvoidptr(parent(x))
+cvoidptr(x::Sm1xxArray) = cvoidptr(parent(x))
 elem_ptr(A::BlockscaledArray)  = cvoidptr(A.p)
-scale_ptr(A::BlockscaledArray) = cvoidptr(parent(A.x))
+scale_ptr(A::BlockscaledArray) = cvoidptr(A.x)
 
 # ---------------------------------------------------------------------------
 # D = α * Aᵀ * B + β * C, block-scaled
@@ -84,12 +98,10 @@ scale_ptr(A::BlockscaledArray) = cvoidptr(parent(A.x))
 # C and D may alias (in-place accumulation) or differ in type (e.g. requant).
 # ---------------------------------------------------------------------------
 
-const Sm1xxBlockscaledMatrix{T,K,P} = BlockscaledArray{T,2,K,<:Sm1xxArray,P}
-
 const DeviceScalar{T<:Number} = CuArray{T,0}
 
 function _blockscaled_matmul!(D::CuMatrix, C::CuMatrix,
-                              A::Sm1xxBlockscaledMatrix, B::Sm1xxBlockscaledMatrix,
+                              A::BlockscaledMatrix, B::BlockscaledMatrix,
                               α, β)
     Ka, M = size(A.p)
     Kb, N = size(B.p)
@@ -102,8 +114,8 @@ function _blockscaled_matmul!(D::CuMatrix, C::CuMatrix,
     Btype = convert(cudaDataType, element_type(B))
     Ctype = convert(cudaDataType, eltype(C))
     Dtype = convert(cudaDataType, eltype(D))
-    smA = scale_mode(contraction_block(A), scale_type(A))
-    smB = scale_mode(contraction_block(B), scale_type(B))
+    smA = scale_mode(A)
+    smB = scale_mode(B)
 
     H = lt_handle()
     md = Ref{cublasLtMatmulDesc_t}()
@@ -179,13 +191,13 @@ setattr_pref!(pref, attr, val::T) where {T} =
 #       Mixed host/device not supported by cuBLASLt for block-scaled matmul.
 # ---------------------------------------------------------------------------
 
-function LinearAlgebra.mul!(C::CuMatrix, Wt::Transpose{<:Any,<:Sm1xxBlockscaledMatrix},
-                            X::Sm1xxBlockscaledMatrix, α::Number, β::Number)
+function LinearAlgebra.mul!(C::CuMatrix, Wt::Transpose{<:Any,<:BlockscaledMatrix},
+                            X::BlockscaledMatrix, α::Number, β::Number)
     return _blockscaled_matmul!(C, C, parent(Wt), X, α, β)
 end
 
-function LinearAlgebra.mul!(C::CuMatrix, Wt::Transpose{<:Any,<:Sm1xxBlockscaledMatrix},
-                            X::Sm1xxBlockscaledMatrix, α::DeviceScalar, β::DeviceScalar)
+function LinearAlgebra.mul!(C::CuMatrix, Wt::Transpose{<:Any,<:BlockscaledMatrix},
+                            X::BlockscaledMatrix, α::DeviceScalar, β::DeviceScalar)
     return _blockscaled_matmul!(C, C, parent(Wt), X, α, β)
 end
 

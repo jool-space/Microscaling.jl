@@ -197,3 +197,85 @@ end
         @test isapprox(Float32.(Array(C)), C_ref; rtol = 1e-2, atol = 1e-2)
     end
 end
+
+@testset "cuBLASLt tensorwide FP8 — mul!(C, W', X)" begin
+    Random.seed!(12)
+
+    Element = Float8_E4M3FN
+    M, N, K = 256, 256, 256
+
+    w_data  = Element.(randn(K, M))
+    x_data  = Element.(randn(K, N))
+    w_scale = Float32[0.5]
+    x_scale = Float32[0.25]
+
+    C_ref = Float32.(w_data) .* w_scale[1]
+    C_ref = transpose(C_ref) * (Float32.(x_data) .* x_scale[1])
+
+    W = BlockscaledArray{Float32}(CuArray(reshape(w_scale, 1, 1)), CuArray(w_data), (:, :))
+    X = BlockscaledArray{Float32}(CuArray(reshape(x_scale, 1, 1)), CuArray(x_data), (:, :))
+    C = CUDA.zeros(Float32, M, N)
+
+    mul!(C, transpose(W), X, 1.0f0, 0.0f0)
+
+    @test isapprox(Array(C), C_ref; rtol = 1e-5, atol = 1e-5)
+end
+
+if CUDA.capability(CUDA.device()).major == 9  # Hopper only
+
+@testset "cuBLASLt VEC128 FP8 — mul!(C, W', X)" begin
+    Random.seed!(10)
+
+    Element = Float8_E4M3FN
+    block = 128
+
+    @testset "M=$M, N=$N, K=$K" for (M, N, K) in (
+        (128, 128, 128),
+        (256, 256, 256),
+        (512, 512, 512),
+    )
+        K_s = K ÷ block
+
+        w_data  = Element.(randn(K, M))
+        x_data  = Element.(randn(K, N))
+        w_scale = Float32.(rand(K_s, M) / √K)
+        x_scale = Float32.(rand(K_s, N) / √K)
+
+        C_ref = blockscaled_gemm_reference(w_data, w_scale, x_data, x_scale, block)
+
+        W = BlockscaledArray{Float32}(CuArray(w_scale), CuArray(w_data))
+        X = BlockscaledArray{Float32}(CuArray(x_scale), CuArray(x_data))
+        C = CUDA.zeros(Float32, M, N)
+
+        mul!(C, transpose(W), X, 1.0f0, 0.0f0)
+
+        @test isapprox(Array(C), C_ref; rtol = 1e-2, atol = 1e-2)
+    end
+end
+
+@testset "cuBLASLt BLK128x128 × VEC128 — mul!(C, W', X)" begin
+    Random.seed!(11)
+
+    Element = Float8_E4M3FN
+    M, N, K = 512, 512, 512
+    K_s = K ÷ 128
+    M_s = M ÷ 128
+
+    w_data  = Element.(randn(K, M))
+    x_data  = Element.(randn(K, N))
+    w_scale = Float32.(rand(K_s, M_s) / √K)
+    x_scale = Float32.(rand(K_s, N) / √K)
+
+    C_ref = blockscaled_gemm_reference(w_data, w_scale, x_data, x_scale, 128;
+        x_block_size=(128, 128), y_block_size=128)
+
+    W = BlockscaledArray{Float32}(CuArray(w_scale), CuArray(w_data), (128, 128))
+    X = BlockscaledArray{Float32}(CuArray(x_scale), CuArray(x_data))
+    C = CUDA.zeros(Float32, M, N)
+
+    mul!(C, transpose(W), X, 1.0f0, 0.0f0)
+
+    @test isapprox(Array(C), C_ref; rtol = 1e-2, atol = 1e-2)
+end
+
+end # Hopper only (sm_90)
