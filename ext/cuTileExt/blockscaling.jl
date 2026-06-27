@@ -1,5 +1,5 @@
-using Microscaling.Blockscaling
-import Microscaling.Blockscaling: block_size, scale_type, element_type
+using Microscaling
+import Microscaling: block_size, scale_type, element_type
 
 import cuTile as ct
 using cuTile: KernelAdaptor, TileArray, Tile

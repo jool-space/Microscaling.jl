@@ -40,8 +40,8 @@ Random.seed!(1)
     Y_scales = scale_wrapper(CuArray(y_scale))
 
     if Element <: Float4_E2M1FN
-        X_elements = PackedArray{Element}(CuArray(x_data))
-        Y_elements = PackedArray{Element}(CuArray(y_data))
+        X_elements = NarrowArray{Element}(CuArray(x_data))
+        Y_elements = NarrowArray{Element}(CuArray(y_data))
     else
         X_elements = CuArray(x_data)
         Y_elements = CuArray(y_data)

@@ -1,4 +1,5 @@
 [deps]
+BitPacking = "b58c8408-13c4-4787-8733-7038ae624acf"
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 CUDACore = "bd0ed864-bdfe-4181-a5ed-ce625a5fdea2"
 Einops = "e3ce28c8-8bfb-4704-8add-e3e7f14b55c9"

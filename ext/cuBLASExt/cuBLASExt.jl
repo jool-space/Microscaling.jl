@@ -11,10 +11,13 @@ module cuBLASExt
 using LinearAlgebra: LinearAlgebra, Transpose
 
 using Microscaling:
-    Sm1xxArray, PackedArray,
+    Sm1xxArray,
     Float8_E4M3FN, Float8_E5M2, Float4_E2M1FN, Float8_E8M0FNU,
     BlockscaledArray, BlockscaledVector, BlockscaledMatrix,
     block_size, scale_type, element_type
+import Microscaling: batched_mul!
+
+using BitPacking: NarrowArray
 
 using CUDACore: CUDACore, CuArray, CuMatrix, CuPtr, cudaDataType,
     R_8F_E4M3, R_8F_E5M2, R_4F_E2M1
@@ -22,6 +25,7 @@ using cuBLAS: cublasLtHandle_t, cublasLtCreate,
     cublasLtMatmulDesc_t, cublasLtMatmulDescCreate, cublasLtMatmulDescDestroy,
     cublasLtMatmulDescSetAttribute,
     cublasLtMatrixLayout_t, cublasLtMatrixLayoutCreate, cublasLtMatrixLayoutDestroy,
+    cublasLtMatrixLayoutSetAttribute,
     cublasLtMatmulPreference_t, cublasLtMatmulPreferenceCreate,
     cublasLtMatmulPreferenceDestroy, cublasLtMatmulPreferenceSetAttribute,
     cublasLtMatmulAlgoGetHeuristic, cublasLtMatmulHeuristicResult_t, cublasLtMatmul,
@@ -34,7 +38,8 @@ using cuBLAS: cublasLtHandle_t, cublasLtCreate,
     CUBLASLT_MATMUL_MATRIX_SCALE_SCALAR_32F,
     CUBLASLT_MATMUL_MATRIX_SCALE_VEC128_32F, CUBLASLT_MATMUL_MATRIX_SCALE_BLK128x128_32F,
     CUBLASLT_MATMUL_PREF_MAX_WORKSPACE_BYTES,
-    CUBLASLT_POINTER_MODE_HOST, CUBLASLT_POINTER_MODE_DEVICE
+    CUBLASLT_POINTER_MODE_HOST, CUBLASLT_POINTER_MODE_DEVICE,
+    CUBLASLT_MATRIX_LAYOUT_BATCH_COUNT, CUBLASLT_MATRIX_LAYOUT_STRIDED_BATCH_OFFSET
 
 # ---------------------------------------------------------------------------
 # handle (crude per-process global; a per-context HandleCache is a later step)
@@ -53,6 +58,8 @@ end
 
 setattr!(desc, attr, val::T) where {T} =
     cublasLtMatmulDescSetAttribute(desc, attr, Ref(val), sizeof(T))
+setlayout!(layout, attr, val::T) where {T} =
+    cublasLtMatrixLayoutSetAttribute(layout, attr, Ref(val), sizeof(T))
 
 # ---------------------------------------------------------------------------
 # glue: Microscaling types -> cuBLASLt enums
@@ -63,7 +70,8 @@ Base.convert(::Type{cudaDataType}, ::Type{Float8_E5M2})   = R_8F_E5M2
 Base.convert(::Type{cudaDataType}, ::Type{Float4_E2M1FN}) = R_4F_E2M1
 
 # block size + scale element -> cuBLASLt scale mode
-function scale_mode(A::BlockscaledMatrix)
+function scale_mode(A::BlockscaledArray{<:Any,N}) where {N}
+    N >= 2 || throw(ArgumentError("scale_mode requires at least 2D"))
     _scale_mode(block_size(A, 1), block_size(A, 2), scale_type(A))
 end
 function _scale_mode(k::Integer, m::Integer, ::Type{Float8_E8M0FNU})
@@ -85,7 +93,7 @@ function _scale_mode(::Colon, ::Colon, ::Type{Float32})
 end
 
 cvoidptr(x) = reinterpret(CuPtr{Cvoid}, pointer(x))
-cvoidptr(x::PackedArray) = cvoidptr(parent(x))
+cvoidptr(x::NarrowArray) = cvoidptr(parent(x))
 cvoidptr(x::Sm1xxArray) = cvoidptr(parent(x))
 elem_ptr(A::BlockscaledArray)  = cvoidptr(A.p)
 scale_ptr(A::BlockscaledArray) = cvoidptr(A.x)
@@ -93,22 +101,30 @@ scale_ptr(A::BlockscaledArray) = cvoidptr(A.x)
 # ---------------------------------------------------------------------------
 # D = α * Aᵀ * B + β * C, block-scaled
 #
-# A (K×M) and B (K×N) are K-major (TN orientation, hardware requirement).
-# C (M×N) is the read-input for β-accumulation, D (M×N) is the write-output.
-# C and D may alias (in-place accumulation) or differ in type (e.g. requant).
+# A (K×M[×batch]) and B (K×N[×batch]) are K-major (TN orientation).
+# C (M×N[×batch]) is the read-input for β-accumulation.
+# D (M×N[×batch]) is the write-output; may alias C.
 # ---------------------------------------------------------------------------
 
 const DeviceScalar{T<:Number} = CuArray{T,0}
 
-function _blockscaled_matmul!(D::CuMatrix, C::CuMatrix,
-                              A::BlockscaledMatrix, B::BlockscaledMatrix,
+function _blockscaled_matmul!(D::CuArray, C::CuArray,
+                              A::BlockscaledArray, B::BlockscaledArray,
                               α, β)
-    Ka, M = size(A.p)
-    Kb, N = size(B.p)
-    Ka == Kb || throw(DimensionMismatch("contraction mismatch: A is $(size(A.p)), B is $(size(B.p))"))
-    K = Ka
-    size(D) == (M, N) || throw(DimensionMismatch("D is $(size(D)), expected ($M, $N)"))
-    size(C) == (M, N) || throw(DimensionMismatch("C is $(size(C)), expected ($M, $N)"))
+    K, M = size(A.p, 1), size(A.p, 2)
+    Kb, N = size(B.p, 1), size(B.p, 2)
+    K == Kb || throw(DimensionMismatch("contraction mismatch: A is $(size(A.p)), B is $(size(B.p))"))
+
+    batched = ndims(A.p) == 3
+    batch = batched ? size(A.p, 3) : 1
+    if batched
+        size(B.p, 3) == batch || throw(DimensionMismatch("batch mismatch: A has $(batch), B has $(size(B.p, 3))"))
+        size(D) == (M, N, batch) || throw(DimensionMismatch("D is $(size(D)), expected ($M, $N, $batch)"))
+        size(C) == (M, N, batch) || throw(DimensionMismatch("C is $(size(C)), expected ($M, $N, $batch)"))
+    else
+        size(D) == (M, N) || throw(DimensionMismatch("D is $(size(D)), expected ($M, $N)"))
+        size(C) == (M, N) || throw(DimensionMismatch("C is $(size(C)), expected ($M, $N)"))
+    end
 
     Atype = convert(cudaDataType, element_type(A))
     Btype = convert(cudaDataType, element_type(B))
@@ -141,6 +157,16 @@ function _blockscaled_matmul!(D::CuMatrix, C::CuMatrix,
         cublasLtMatrixLayoutCreate(lb, Btype, UInt64(K), UInt64(N), Int64(K))
         cublasLtMatrixLayoutCreate(lc, Ctype, UInt64(M), UInt64(N), Int64(M))
         cublasLtMatrixLayoutCreate(ld, Dtype, UInt64(M), UInt64(N), Int64(M))
+
+        if batched
+            for l in (la, lb, lc, ld)
+                setlayout!(l[], CUBLASLT_MATRIX_LAYOUT_BATCH_COUNT, Cint(batch))
+            end
+            setlayout!(la[], CUBLASLT_MATRIX_LAYOUT_STRIDED_BATCH_OFFSET, Int64(K * M))
+            setlayout!(lb[], CUBLASLT_MATRIX_LAYOUT_STRIDED_BATCH_OFFSET, Int64(K * N))
+            setlayout!(lc[], CUBLASLT_MATRIX_LAYOUT_STRIDED_BATCH_OFFSET, Int64(M * N))
+            setlayout!(ld[], CUBLASLT_MATRIX_LAYOUT_STRIDED_BATCH_OFFSET, Int64(M * N))
+        end
 
         cublasLtMatmulPreferenceCreate(pref)
         setattr_pref!(pref[], CUBLASLT_MATMUL_PREF_MAX_WORKSPACE_BYTES, Csize_t(1 << 24))
@@ -199,6 +225,20 @@ end
 function LinearAlgebra.mul!(C::CuMatrix, Wt::Transpose{<:Any,<:BlockscaledMatrix},
                             X::BlockscaledMatrix, α::DeviceScalar, β::DeviceScalar)
     return _blockscaled_matmul!(C, C, parent(Wt), X, α, β)
+end
+
+function batched_mul!(D::CuArray{<:Any,3},
+                                   A::BlockscaledArray{<:Any,3},
+                                   B::BlockscaledArray{<:Any,3},
+                                   α::Number, β::Number)
+    return _blockscaled_matmul!(D, D, A, B, α, β)
+end
+
+function batched_mul!(D::CuArray{<:Any,3},
+                                   A::BlockscaledArray{<:Any,3},
+                                   B::BlockscaledArray{<:Any,3},
+                                   α::DeviceScalar, β::DeviceScalar)
+    return _blockscaled_matmul!(D, D, A, B, α, β)
 end
 
 end # module

@@ -162,8 +162,8 @@ end
 
         C_ref = blockscaled_gemm_reference(w_data, w_scale, x_data, x_scale, block)
 
-        W = BlockscaledArray(sm1xx(CuArray(w_scale)), PackedArray{Element}(CuArray(w_data)))
-        X = BlockscaledArray(sm1xx(CuArray(x_scale)), PackedArray{Element}(CuArray(x_data)))
+        W = BlockscaledArray(sm1xx(CuArray(w_scale)), NarrowArray{Element}(CuArray(w_data)))
+        X = BlockscaledArray(sm1xx(CuArray(x_scale)), NarrowArray{Element}(CuArray(x_data)))
         C = CUDA.zeros(Float32, M, N)
 
         mul!(C, transpose(W), X, 1.0f0, 0.0f0)
@@ -188,8 +188,8 @@ end
 
     C_ref = blockscaled_gemm_reference(w_data, w_scale, x_data, x_scale, block)
 
-    W = BlockscaledArray(sm1xx(CuArray(w_scale)), PackedArray{Element}(CuArray(w_data)))
-    X = BlockscaledArray(sm1xx(CuArray(x_scale)), PackedArray{Element}(CuArray(x_data)))
+    W = BlockscaledArray(sm1xx(CuArray(w_scale)), NarrowArray{Element}(CuArray(w_data)))
+    X = BlockscaledArray(sm1xx(CuArray(x_scale)), NarrowArray{Element}(CuArray(x_data)))
 
     @testset "Dtype=$Dtype" for Dtype in (Float32, Float16, CUDACore.BFloat16)
         C = CUDA.zeros(Dtype, M, N)
@@ -219,6 +219,36 @@ end
     mul!(C, transpose(W), X, 1.0f0, 0.0f0)
 
     @test isapprox(Array(C), C_ref; rtol = 1e-5, atol = 1e-5)
+end
+
+@testset "cuBLASLt batched MXFP8 — batched_mul!" begin
+    Random.seed!(13)
+
+    Element = Float8_E4M3FN
+    Scale   = Float8_E8M0FNU
+    block = 32
+    M, N, K = 256, 256, 256
+    batch = 4
+    K_s = K ÷ block
+
+    w_data  = Element.(randn(K, M, batch))
+    x_data  = Element.(randn(K, N, batch))
+    w_scale = Scale.(rand(K_s, M, batch))
+    x_scale = Scale.(rand(K_s, N, batch))
+
+    D_ref = stack(1:batch) do b
+        blockscaled_gemm_reference(
+            w_data[:,:,b], w_scale[:,:,b],
+            x_data[:,:,b], x_scale[:,:,b], block)
+    end
+
+    W = BlockscaledArray(sm1xx(CuArray(w_scale)), CuArray(w_data))
+    X = BlockscaledArray(sm1xx(CuArray(x_scale)), CuArray(x_data))
+    D = CUDA.zeros(Float32, M, N, batch)
+
+    batched_mul!(D, W, X, 1.0f0, 0.0f0)
+
+    @test isapprox(Array(D), D_ref; rtol = 1e-5, atol = 1e-5)
 end
 
 if CUDA.capability(CUDA.device()).major == 9  # Hopper only

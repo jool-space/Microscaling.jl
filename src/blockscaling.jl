@@ -1,20 +1,22 @@
-module Blockscaling
-
-export BlockscaledArray, BlockscaledVector, BlockscaledMatrix
-public block_size, scale_type, element_type
-
 struct BlockscaledArray{
     T<:Number, N, K<:NTuple{N,Any},
     X<:AbstractArray{<:Number,N}, P<:AbstractArray{<:Number,N},
 } <: AbstractArray{T,N}
     x::X
     p::P
+    function BlockscaledArray{T,N,K,X,P}(x::X, p::P) where {
+        T<:Number, N, K<:NTuple{N,Any},
+        X<:AbstractArray{<:Number,N}, P<:AbstractArray{<:Number,N}
+    }
+        new{T,N,K,X,P}(x, p)
+    end
 end
 
 function BlockscaledArray{T,N,K}(x::X, p::P) where {
     T<:Number, N, K<:NTuple{N,Any},
     X<:AbstractArray{<:Number,N}, P<:AbstractArray{<:Number,N}
 }
+    validate_block_size(Tuple(K.parameters), size(x), size(p))
     return BlockscaledArray{T,N,K,X,P}(x, p)
 end
 
@@ -39,15 +41,17 @@ function BlockscaledArray{T}(
     p::AbstractArray{<:Number,N},
     block_size::NTuple{N,Union{Int,Colon}} = ntuple(i -> size(p, i) ÷ size(x, i), Val(N))
 ) where {T,N}
-    validate_block_size(block_size, size(x), size(p))
     K = Tuple{block_size...}
     return BlockscaledArray{T,N,K}(x, p)
 end
 
-function BlockscaledArray(x::AbstractArray, p::AbstractArray, args...; kws...)
+function promote_eltype(x::AbstractArray, p::AbstractArray)
     T = promote_type(eltype(x), eltype(p))
-    isabstracttype(T) && (T = Float32)
-    return BlockscaledArray{T}(x, p, args...; kws...)
+    isabstracttype(T) ? Float32 : T
+end
+
+function BlockscaledArray(x::AbstractArray, p::AbstractArray, args...; kws...)
+    return BlockscaledArray{promote_eltype(x, p)}(x, p, args...; kws...)
 end
 
 Base.size(arr::BlockscaledArray, args...) = size(arr.p, args...)
@@ -59,6 +63,7 @@ element_type(arr::BlockscaledArray) = eltype(arr.p)
 Base.IndexStyle(::Type{<:BlockscaledArray}) = IndexCartesian()
 
 function Base.getindex(arr::BlockscaledArray{T,N}, i::Vararg{Int,N}) where {T,N}
+    @boundscheck checkbounds(arr, i...)
     iₚ = i
     iₓ = ntuple(Val(N)) do j
         k = block_size(arr, j)
@@ -82,13 +87,14 @@ const BlockscaledMatrix{T} = BlockscaledArray{T,2}
 using Rewrap
 
 function Base.copy(arr::BlockscaledArray{T,N}) where {T,N}
-    x_singleton = reshape(copy(arr.x), ntuple(i -> isodd(i) ? Unsqueeze() : Keep(), Val(2N)))
+    x_singleton = reshape(T.(arr.x), ntuple(i -> isodd(i) ? Unsqueeze() : Keep(), Val(2N)))
     p_shape = ntuple(Val(N)) do i
         k = block_size(arr, i)
-        Split(1, k isa Colon ? (:, 1) : (k, :))
+        k = k isa Colon ? size(arr, i) : k
+        Split(1, (k, :))
     end
-    p_block     = reshape(copy(arr.p), p_shape)
-    v = T.(x_singleton) .* T.(p_block)
+    p_block = reshape(T.(arr.p), p_shape)
+    v = x_singleton .* p_block
     return reshape(v, ntuple(Returns(Merge(2)), Val(N)))
 end
 
@@ -96,6 +102,4 @@ end
 
 Base.broadcastable(arr::BlockscaledArray) = copy(arr)
 
-Base.print_array(io::IO, arr::BlockscaledArray) = Base.print_array(io, Base.broadcastable(arr))
-
-end
+Base.print_array(io::IO, arr::BlockscaledArray) = Base.print_array(io, copy(arr))
