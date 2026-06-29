@@ -15,6 +15,7 @@ CUDACore = {rev = "stable-narrow", subdir = "CUDACore", url = "https://github.co
 cuTile = {rev = "ao/abstract", url = "https://github.com/JuliaGPU/cuTile.jl"}
 
 [compat]
+BitPacking = "0.2.1"
 CUDA = "6"
 Einops = "0.2.1"
 cuTile = "0.3.0"
