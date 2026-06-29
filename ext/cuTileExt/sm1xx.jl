@@ -1,11 +1,10 @@
 using Microscaling
 
 import cuTile as ct
-using cuTile: KernelAdaptor, TileArray
-using Adapt: Adapt, adapt
+import Adapt
 using Einops: @rearrange
 
-struct Sm1xxTileArray{T,N,A<:TileArray{T}}
+struct Sm1xxTileArray{T,N,A<:ct.TileArray{T}} <: ct.AbstractTileArray{T,N}
     size::NTuple{N,Int}
     parent::A
 end
@@ -15,10 +14,10 @@ Base.size(s::Sm1xxTileArray) = s.size
 Base.eltype(::Sm1xxTileArray{T}) where T = T
 Base.ndims(::Sm1xxTileArray{T,N}) where {T,N} = N
 
-function Adapt.adapt_structure(to::KernelAdaptor, arr::Sm1xxArray)
+function Adapt.adapt_structure(to::ct.KernelAdaptor, arr::Sm1xxArray)
     return Sm1xxTileArray(
         size(arr),
-        Adapt.adapt_structure(
+        Adapt.adapt(
             to,
             @rearrange(parent(arr), "k1 m2 m1 k0 m0 ... -> (k1 m2 m1) k0 m0 ...")
         )

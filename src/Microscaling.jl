@@ -1,14 +1,16 @@
 module Microscaling
 
 using Republic
+import Adapt
 
 @reexport using Microfloats
 
-using BitPacking
+@reexport using BitPacking:
+    NarrowArray, NarrowVector, NarrowMatrix,
+    bitwidth
 
 include("blockscaling.jl")
 export BlockscaledArray, BlockscaledVector, BlockscaledMatrix
-export GlobalScaleArray, GlobalScaleVector, GlobalScaleMatrix
 public block_size, scale_type, element_type
 
 include("sm1xx.jl")

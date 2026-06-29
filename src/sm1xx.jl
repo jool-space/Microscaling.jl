@@ -34,6 +34,10 @@ function Base.getindex(s::Sm1xxArray{T,N}, i::Vararg{Int,N}) where {T,N}
     return @inbounds parent(s)[k1i, m2i, m1i, k0i, m0i, rest...]
 end
 
+function Adapt.adapt_structure(to, arr::Sm1xxArray)
+    return Sm1xxArray(Adapt.adapt(to, parent(arr)))
+end
+
 using Einops: @rearrange
 
 function sm1xx(x::AbstractArray)

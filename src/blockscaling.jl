@@ -62,6 +62,21 @@ element_type(arr::BlockscaledArray) = eltype(arr.p)
 
 Base.IndexStyle(::Type{<:BlockscaledArray}) = IndexCartesian()
 
+function Adapt.adapt_structure(
+    to, arr::BlockscaledArray{T,N,K}
+) where {T,N,K}
+    x = Adapt.adapt(to, arr.x)
+    p = Adapt.adapt(to, arr.p)
+    return BlockscaledArray{T,N,K}(x, p)
+end
+
+# Allocate plain (dense) output in the SAME storage as the element data, so
+# `similar(arr, T, dims)` on a GPU-backed BlockscaledArray yields a GPU array
+# rather than Base's default CPU `Array`. Reductions/maps rely on this for the
+# destination buffer.
+Base.similar(arr::BlockscaledArray, ::Type{T}, dims::Dims) where {T} =
+    similar(arr.p, T, dims)
+
 function Base.getindex(arr::BlockscaledArray{T,N}, i::Vararg{Int,N}) where {T,N}
     @boundscheck checkbounds(arr, i...)
     iₚ = i
