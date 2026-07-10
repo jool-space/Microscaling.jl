@@ -163,8 +163,8 @@ end
 
         C_ref = blockscaled_gemm_reference(w_data, w_scale, x_data, x_scale, block)
 
-        W = BlockscaledArray(sm1xx(CuArray(w_scale)), Narrow{Element}.(CuArray(w_data)))
-        X = BlockscaledArray(sm1xx(CuArray(x_scale)), Narrow{Element}.(CuArray(x_data)))
+        W = BlockscaledArray(sm1xx(CuArray(w_scale)), NarrowArray{Element}(CuArray(w_data)))
+        X = BlockscaledArray(sm1xx(CuArray(x_scale)), NarrowArray{Element}(CuArray(x_data)))
         C = CUDA.zeros(Float32, M, N)
 
         mul!(C, transpose(W), X, 1.0f0, 0.0f0)
@@ -189,8 +189,8 @@ end
 
     C_ref = blockscaled_gemm_reference(w_data, w_scale, x_data, x_scale, block)
 
-    W = BlockscaledArray(sm1xx(CuArray(w_scale)), Narrow{Element}.(CuArray(w_data)))
-    X = BlockscaledArray(sm1xx(CuArray(x_scale)), Narrow{Element}.(CuArray(x_data)))
+    W = BlockscaledArray(sm1xx(CuArray(w_scale)), NarrowArray{Element}(CuArray(w_data)))
+    X = BlockscaledArray(sm1xx(CuArray(x_scale)), NarrowArray{Element}(CuArray(x_data)))
 
     @testset "Dtype=$Dtype" for Dtype in (Float32, Float16, BFloat16)
         C = CUDA.zeros(Dtype, M, N)

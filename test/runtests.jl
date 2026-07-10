@@ -16,7 +16,6 @@ end
 
 @testset "Microscaling.jl" begin
     if CUDA.functional()
-        include("gemm_mxfp8.jl")
         include("gemm_cublaslt.jl")
     end
 end

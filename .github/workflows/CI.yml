@@ -98,6 +98,7 @@ jobs:
           JULIA_PKG_SERVER: ''
       - uses: julia-actions/julia-docdeploy@v1
         env:
+          JULIA_PKG_SERVER: ''
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
       - name: Run doctests
