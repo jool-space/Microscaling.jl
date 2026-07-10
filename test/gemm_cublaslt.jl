@@ -247,7 +247,8 @@ end
     X = BlockscaledArray(sm1xx(CuArray(x_scale)), CuArray(x_data))
     D = CUDA.zeros(Float32, M, N, batch)
 
-    batched_mul!(D, W, X, 1.0f0, 0.0f0)
+    Wt = PermutedDimsArray(W, (2, 1, 3))
+    batched_mul!(D, Wt, X, 1.0f0, 0.0f0)
 
     @test isapprox(Array(D), D_ref; rtol = 1e-5, atol = 1e-5)
 end

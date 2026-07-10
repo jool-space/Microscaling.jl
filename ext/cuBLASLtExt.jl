@@ -45,21 +45,39 @@ _scale_mode(::Colon, ::Colon, ::Type{Float32}) = :scalar_f32
 
 const DeviceScalar{T<:Number} = CuArray{T,0}
 
+_mul!(C, Wt, X, α, β) = cuBLASLt.matmul!(C, Wt, X; α, β)
+
 function LinearAlgebra.mul!(C::CuMatrix,
                             Wt::Transpose{<:Any,<:BlockscaledMatrix},
                             X::BlockscaledMatrix,
-                            α::Union{Number,DeviceScalar},
-                            β::Union{Number,DeviceScalar})
-    return cuBLASLt.matmul!(C, Wt, X; α, β)
+                            α::Number, β::Number)
+    return _mul!(C, Wt, X, α, β)
+end
+
+function LinearAlgebra.mul!(C::CuMatrix,
+                            Wt::Transpose{<:Any,<:BlockscaledMatrix},
+                            X::BlockscaledMatrix,
+                            α::DeviceScalar, β::DeviceScalar)
+    return _mul!(C, Wt, X, α, β)
+end
+
+const TransposedBlockscaledBatch{T,A<:BlockscaledArray{<:Any,3}} =
+    PermutedDimsArray{T,3,(2,1,3),(2,1,3),A}
+
+_batched_mul!(D, At, B, α, β) = cuBLASLt.matmul!(D, At, B; α, β)
+
+function batched_mul!(D::CuArray{<:Any,3},
+                      At::TransposedBlockscaledBatch,
+                      B::BlockscaledArray{<:Any,3},
+                      α::Number, β::Number)
+    return _batched_mul!(D, At, B, α, β)
 end
 
 function batched_mul!(D::CuArray{<:Any,3},
-                      A::BlockscaledArray{<:Any,3},
+                      At::TransposedBlockscaledBatch,
                       B::BlockscaledArray{<:Any,3},
-                      α::Union{Number,DeviceScalar},
-                      β::Union{Number,DeviceScalar})
-    At = PermutedDimsArray(A, (2, 1, 3))
-    return cuBLASLt.matmul!(D, At, B; α, β)
+                      α::DeviceScalar, β::DeviceScalar)
+    return _batched_mul!(D, At, B, α, β)
 end
 
 end
