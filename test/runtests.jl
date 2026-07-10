@@ -2,6 +2,7 @@ using Microscaling
 using Test
 
 using CUDA
+using cuBLASLt
 using Random
 
 using BitPacking
