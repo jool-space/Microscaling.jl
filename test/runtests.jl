@@ -8,6 +8,8 @@ using Random
 
 using BitPacking
 
+@assert !isnothing(Base.get_extension(BitPacking, :cuTileExt))
+
 function blockscaled_gemm_reference(x_data, x_scale, y_data, y_scale, block_size;
                                     x_block_size=block_size, y_block_size=block_size)
     _bs(b) = b isa Tuple ? b : (b, 1)
