@@ -65,10 +65,6 @@ setlayout!(layout, attr, val::T) where {T} =
 # glue: Microscaling types -> cuBLASLt enums
 # ---------------------------------------------------------------------------
 
-Base.convert(::Type{cudaDataType}, ::Type{Float8_E4M3FN}) = R_8F_E4M3
-Base.convert(::Type{cudaDataType}, ::Type{Float8_E5M2})   = R_8F_E5M2
-Base.convert(::Type{cudaDataType}, ::Type{Float4_E2M1FN}) = R_4F_E2M1
-
 # block size + scale element -> cuBLASLt scale mode
 function scale_mode(A::BlockscaledArray{<:Any,N}) where {N}
     N >= 2 || throw(ArgumentError("scale_mode requires at least 2D"))

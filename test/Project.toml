@@ -11,7 +11,6 @@ cuTile = "0dea8319-8c4a-4662-a73d-20234d115b9a"
 
 [sources]
 BitPacking = {rev = "cutile", url = "https://github.com/MurrellGroup/BitPacking.jl"}
-CUDACore = {rev = "stable-narrow", subdir = "CUDACore", url = "https://github.com/AntonOresten/CUDA.jl"}
 cuTile = {rev = "ao/abstract", url = "https://github.com/JuliaGPU/cuTile.jl"}
 
 [compat]

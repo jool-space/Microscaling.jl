@@ -31,9 +31,9 @@ BitPacking = {rev = "cutile", url = "https://github.com/MurrellGroup/BitPacking.
 [compat]
 Adapt = "4.6.0"
 BitPacking = "0.2.0"
-CUDACore = "6"
+CUDACore = "6.2.1"
 Einops = "0.2.1"
-Microfloats = "0.2.1"
+Microfloats = "0.2.3"
 Republic = "2.2"
 Rewrap = "0.1.8"
 StaticArrays = "1.9.18"
