@@ -3,6 +3,7 @@ using Test
 
 using CUDA
 using cuBLASLt
+import cuTile as ct
 using Random
 
 using BitPacking
@@ -17,6 +18,8 @@ end
 
 @testset "Microscaling.jl" begin
     if CUDA.functional()
+        include("gemm_agnostic.jl")
+        include("gemm_mxfp8.jl")
         include("gemm_cublaslt.jl")
     end
 end
