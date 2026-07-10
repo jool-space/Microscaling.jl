@@ -11,7 +11,7 @@ cuBLASLt = "448fee3d-7d89-4b6e-8554-2e2b5f03afa7"
 cuTile = "0dea8319-8c4a-4662-a73d-20234d115b9a"
 
 [sources]
-BitPacking = {rev = "c10c3c63d60554606b95a86ae086651992d4565b", url = "https://github.com/MurrellGroup/BitPacking.jl"}
+BitPacking = {rev = "cutile", url = "https://github.com/MurrellGroup/BitPacking.jl"}
 cuTile = {rev = "main", url = "https://github.com/JuliaGPU/cuTile.jl"}
 
 [compat]
