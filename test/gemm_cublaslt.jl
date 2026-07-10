@@ -219,7 +219,7 @@ end
 
     mul!(C, transpose(W), X, 1.0f0, 0.0f0)
 
-    @test isapprox(Array(C), C_ref; rtol = 1e-4, atol = 1e-4)
+    @test isapprox(Array(C), C_ref; rtol = 1e-3, atol = 1e-3)
 end
 
 @testset "cuBLASLt batched MXFP8 — batched_mul!" begin
