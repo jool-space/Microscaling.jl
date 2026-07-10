@@ -19,14 +19,9 @@ StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 [weakdeps]
 CUDACore = "bd0ed864-bdfe-4181-a5ed-ce625a5fdea2"
 cuBLAS = "182d3088-87b7-4494-8cad-fc6afaa545bc"
-cuTile = "0dea8319-8c4a-4662-a73d-20234d115b9a"
 
 [extensions]
 cuBLASExt = ["cuBLAS", "CUDACore"]
-cuTileExt = "cuTile"
-
-[sources]
-BitPacking = {rev = "cutile", url = "https://github.com/MurrellGroup/BitPacking.jl"}
 
 [compat]
 Adapt = "4.6.0"
@@ -38,5 +33,4 @@ Republic = "2.2"
 Rewrap = "0.1.8"
 StaticArrays = "1.9.18"
 cuBLAS = "6"
-cuTile = "0.3.0"
 julia = "1.11"

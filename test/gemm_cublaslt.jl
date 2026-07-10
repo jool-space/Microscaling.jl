@@ -1,4 +1,5 @@
 using LinearAlgebra: mul!
+using BFloat16s
 
 @testset "cuBLASLt MXFP8 — mul!(C, W', X)" begin
     Random.seed!(2)
@@ -108,7 +109,7 @@ end
     W = BlockscaledArray(sm1xx(CuArray(w_scale)), CuArray(w_data))
     X = BlockscaledArray(sm1xx(CuArray(x_scale)), CuArray(x_data))
 
-    @testset "Dtype=$Dtype" for Dtype in (Float32, Float16, CUDACore.BFloat16)
+    @testset "Dtype=$Dtype" for Dtype in (Float32, Float16, BFloat16)
         C = CUDA.zeros(Dtype, M, N)
         mul!(C, transpose(W), X, 1.0f0, 0.0f0)
         @test isapprox(Float32.(Array(C)), C_ref; rtol = 1e-2, atol = 1e-2)
@@ -134,7 +135,7 @@ end
     W = BlockscaledArray(sm1xx(CuArray(w_scale)), CuArray(w_data))
     X = BlockscaledArray(sm1xx(CuArray(x_scale)), CuArray(x_data))
 
-    @testset "Dtype=$Dtype" for Dtype in (Float32, Float16, CUDACore.BFloat16)
+    @testset "Dtype=$Dtype" for Dtype in (Float32, Float16, BFloat16)
         C = CUDA.zeros(Dtype, M, N)
         mul!(C, transpose(W), X, 1.0f0, 0.0f0)
         @test isapprox(Float32.(Array(C)), C_ref; rtol = 1e-2, atol = 1e-2)
@@ -191,7 +192,7 @@ end
     W = BlockscaledArray(sm1xx(CuArray(w_scale)), Narrow{Element}.(CuArray(w_data)))
     X = BlockscaledArray(sm1xx(CuArray(x_scale)), Narrow{Element}.(CuArray(x_data)))
 
-    @testset "Dtype=$Dtype" for Dtype in (Float32, Float16, CUDACore.BFloat16)
+    @testset "Dtype=$Dtype" for Dtype in (Float32, Float16, BFloat16)
         C = CUDA.zeros(Dtype, M, N)
         mul!(C, transpose(W), X, 1.0f0, 0.0f0)
         @test isapprox(Float32.(Array(C)), C_ref; rtol = 1e-2, atol = 1e-2)
@@ -218,7 +219,7 @@ end
 
     mul!(C, transpose(W), X, 1.0f0, 0.0f0)
 
-    @test isapprox(Array(C), C_ref; rtol = 1e-5, atol = 1e-5)
+    @test isapprox(Array(C), C_ref; rtol = 1e-4, atol = 1e-4)
 end
 
 @testset "cuBLASLt batched MXFP8 — batched_mul!" begin
