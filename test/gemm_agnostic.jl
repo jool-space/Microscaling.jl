@@ -1,13 +1,11 @@
-using Einops: @rearrange
-
 function gemm_agnostic(X, Y, Z, TM::Int, TN::Int, TK::Int)
     i, j = ct.bid(1), ct.bid(2)
-    num_k = cld(size(X, 1), TK)
+    num_k = cld(size(X, 2), TK)
     z = zeros(Float32, (TM, TN))
     for k in Int32(1):Int32(num_k)
-        x = ct.load(X, (k, i), (TK, TM))
+        x = ct.load(X, (i, k), (TM, TK))
         y = ct.load(Y, (k, j), (TK, TN))
-        z = muladd(transpose(x), y, z)
+        z = muladd(x, y, z)
     end
     ct.store(Z, (i, j), z)
     return
@@ -47,7 +45,9 @@ Random.seed!(1)
         Y_elements = CuArray(y_data)
     end
 
-    X = BlockscaledArray(X_scales, X_elements)
+    # Storage is K-major for both operands; the kernel sees X as M×K and
+    # Y as K×N, with the TN layout carried by the wrapper.
+    X = PermutedDimsArray(BlockscaledArray(X_scales, X_elements), (2, 1))
     Y = BlockscaledArray(Y_scales, Y_elements)
     Z = CUDA.zeros(Float32, M, N)
 
