@@ -3,9 +3,12 @@ using Test
 
 using CUDA
 using cuBLASLt
+import cuTile as ct
 using Random
 
 using BitPacking
+
+@assert !isnothing(Base.get_extension(BitPacking, :cuTileExt))
 
 function blockscaled_gemm_reference(x_data, x_scale, y_data, y_scale, block_size;
                                     x_block_size=block_size, y_block_size=block_size)
@@ -17,6 +20,8 @@ end
 
 @testset "Microscaling.jl" begin
     if CUDA.functional()
+        include("gemm_agnostic.jl")
+        include("gemm_mxfp8.jl")
         include("gemm_cublaslt.jl")
     end
 end

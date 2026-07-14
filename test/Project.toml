@@ -8,6 +8,11 @@ Microscaling = "1a9757c6-0d28-4499-b7bb-62d38933090b"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 cuBLASLt = "448fee3d-7d89-4b6e-8554-2e2b5f03afa7"
+cuTile = "0dea8319-8c4a-4662-a73d-20234d115b9a"
+
+[sources]
+BitPacking = {rev = "cutile", url = "https://github.com/MurrellGroup/BitPacking.jl"}
+cuTile = {rev = "main", url = "https://github.com/JuliaGPU/cuTile.jl"}
 
 [compat]
 BFloat16s = "0.6.1"
