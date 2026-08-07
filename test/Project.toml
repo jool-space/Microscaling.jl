@@ -12,6 +12,7 @@ cuTile = "0dea8319-8c4a-4662-a73d-20234d115b9a"
 
 [compat]
 BitPacking = "0.2.3"
+BFloat16s = "0.6.1"
 CUDA = "6"
 Einops = "0.2.1"
 cuBLASLt = "0.1.1"
