@@ -7,7 +7,6 @@ using Microscaling:
     Float8_E4M3FN, Float8_E8M0FNU,
     BlockscaledArray, BlockscaledMatrix,
     block_size, scale_type
-import Microscaling: batched_mul!
 
 using CUDACore: CuArray, CuMatrix
 import cuBLASLt
@@ -73,25 +72,6 @@ function LinearAlgebra.mul!(C::CuMatrix,
                             X::BlockscaledMatrix,
                             α::DeviceScalar, β::DeviceScalar)
     return _mul!(C, Wt, X, α, β)
-end
-
-const TransposedBlockscaledBatch{T,A<:BlockscaledArray{<:Any,3}} =
-    PermutedDimsArray{T,3,(2,1,3),(2,1,3),A}
-
-_batched_mul!(D, At, B, α, β) = cuBLASLt.matmul!(D, At, B; α, β)
-
-function batched_mul!(D::CuArray{<:Any,3},
-                      At::TransposedBlockscaledBatch,
-                      B::BlockscaledArray{<:Any,3},
-                      α::Number, β::Number)
-    return _batched_mul!(D, At, B, α, β)
-end
-
-function batched_mul!(D::CuArray{<:Any,3},
-                      At::TransposedBlockscaledBatch,
-                      B::BlockscaledArray{<:Any,3},
-                      α::DeviceScalar, β::DeviceScalar)
-    return _batched_mul!(D, At, B, α, β)
 end
 
 end
