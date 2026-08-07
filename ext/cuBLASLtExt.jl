@@ -19,7 +19,21 @@ cuBLASLt.ltscale(A::BlockscaledArray) = A.x
 
 function cuBLASLt.scale_mode(A::BlockscaledArray{<:Any,N}) where {N}
     N >= 2 || throw(ArgumentError("scale_mode requires at least 2D"))
-    return _scale_mode(block_size(A, 1), block_size(A, 2), scale_type(A))
+    mode = _scale_mode(block_size(A, 1), block_size(A, 2), scale_type(A))
+    check_swizzled(A.x, mode)
+    return mode
+end
+
+# cuBLASLt accesses block-mode scales through its swizzled 128×4-entry tiled
+# layout, but only ever sees a raw pointer, so it cannot verify the layout
+# itself: unswizzled scales are silently misread, or read out of bounds. An
+# Sm1xxArray is swizzled and tile-padded by construction.
+function check_swizzled(x, mode::Symbol)
+    mode in (:vec32_ue8m0, :vec16_ue4m3) || return nothing
+    x isa Sm1xxArray || throw(ArgumentError(
+        "cuBLASLt accesses :$mode scales through a swizzled tiled layout, " *
+        "but the scales are a $(nameof(typeof(x))); wrap them with `sm1xx`"))
+    return nothing
 end
 
 function _scale_mode(k::Integer, m::Integer, ::Type{Float8_E8M0FNU})

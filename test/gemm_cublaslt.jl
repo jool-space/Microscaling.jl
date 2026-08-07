@@ -311,3 +311,27 @@ end
 end
 
 end # Hopper only (sm_90)
+
+@testset "cuBLASLt — unswizzled block scales are rejected" begin
+    Scale   = Float8_E8M0FNU
+    Element = Float8_E4M3FN
+    block = 32
+    M, N, K = 128, 128, 128
+    K_s = K ÷ block
+
+    w_scale = CuArray(Scale.(rand(K_s, M)))
+    x_scale = CuArray(Scale.(rand(K_s, N)))
+    w_data  = CuArray(Element.(randn(K, M)))
+    x_data  = CuArray(Element.(randn(K, N)))
+
+    W = BlockscaledArray(sm1xx(w_scale), w_data)
+    @test cuBLASLt.scale_mode(W) == :vec32_ue8m0
+
+    # raw (unswizzled) scale arrays must be refused before they reach the
+    # library, which would silently misread them through its tiled layout
+    W_raw = BlockscaledArray(w_scale, w_data)
+    X_raw = BlockscaledArray(x_scale, x_data)
+    @test_throws ArgumentError cuBLASLt.scale_mode(W_raw)
+    C = CUDA.zeros(Float32, M, N)
+    @test_throws ArgumentError mul!(C, transpose(W_raw), X_raw, 1.0f0, 0.0f0)
+end
