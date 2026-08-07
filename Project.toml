@@ -27,7 +27,7 @@ cuTileExt = ["cuTile", "CUDACore"]
 
 [compat]
 Adapt = "4.6.0"
-BitPacking = "0.2.3"
+BitPacking = "0.2.4"
 CUDACore = "6.2.1"
 Einops = "0.2.1"
 Microfloats = "0.2.3"

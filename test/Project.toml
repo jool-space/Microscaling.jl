@@ -11,7 +11,7 @@ cuBLASLt = "448fee3d-7d89-4b6e-8554-2e2b5f03afa7"
 cuTile = "0dea8319-8c4a-4662-a73d-20234d115b9a"
 
 [compat]
-BitPacking = "0.2.3"
+BitPacking = "0.2.4"
 BFloat16s = "0.6.1"
 CUDA = "6"
 Einops = "0.2.1"
