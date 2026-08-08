@@ -1,5 +1,6 @@
 using Microscaling
 using Microscaling: Float8_E4M3FN, Float8_E5M2, Float8_E8M0FNU, Float4_E2M1FN
+using Microscaling: block_size, scale_type, element_type
 using Test
 
 using CUDA
@@ -8,8 +9,12 @@ import cuTile as ct
 using Random
 
 using BitPacking
+import Adapt
 
 @assert !isnothing(Base.get_extension(BitPacking, :cuTileExt))
+
+dequantize(scales, elements, block) =
+    Float32.(elements) .* repeat(Float32.(scales); inner = block)
 
 function blockscaled_gemm_reference(x_data, x_scale, y_data, y_scale, block_size;
                                     x_block_size=block_size, y_block_size=block_size)
@@ -20,6 +25,9 @@ function blockscaled_gemm_reference(x_data, x_scale, y_data, y_scale, block_size
 end
 
 @testset "Microscaling.jl" begin
+    include("blockscaling.jl")
+    include("sm1xx.jl")
+
     if CUDA.functional()
         include("gemm_agnostic.jl")
         include("gemm_mxfp8.jl")

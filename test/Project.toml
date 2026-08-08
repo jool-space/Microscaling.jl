@@ -1,4 +1,5 @@
 [deps]
+Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
 BFloat16s = "ab4f0b2a-ad5b-11e8-123f-65d77653426b"
 BitPacking = "b58c8408-13c4-4787-8733-7038ae624acf"
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
