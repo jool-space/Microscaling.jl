@@ -1,7 +1,10 @@
-# Microscaling
+# Microscaling.jl
 
 [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://docs.jool.space/Microscaling.jl/dev/)
 [![Build Status](https://github.com/jool-space/Microscaling.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/jool-space/Microscaling.jl/actions/workflows/CI.yml?query=branch%3Amain)
 [![Coverage](https://codecov.io/gh/jool-space/Microscaling.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/jool-space/Microscaling.jl)
 
-Microscaling implements array types for the [OCP Microscaling Formats (MX)](https://www.opencompute.org/documents/ocp-microscaling-formats-mx-v1-0-spec-final-pdf).
+Array types for the [OCP Microscaling Formats (MX)](https://www.opencompute.org/documents/ocp-microscaling-formats-mx-v1-0-spec-final-pdf):
+
+- `BlockscaledArray` pairs narrow elements with per-block scales
+- `Sm1xxArray` presents the swizzled scale layout used by SM 1xx (Blackwell) tensor cores.

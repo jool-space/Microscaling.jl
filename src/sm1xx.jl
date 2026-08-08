@@ -1,7 +1,17 @@
+using Adapt
 using Einops: @rearrange
 
 const k1, m2, m1 = 4, 4, 32
 
+"""
+    Sm1xxArray(x::AbstractArray)
+
+Present a scale-factor array stored in the swizzled `(4, 4, 32, k0, m0, ...)`
+tile layout required by SM 1xx (Blackwell) block-scaled matmuls as its dense
+`(K, M, ...)` equivalent, where `K = 4k0` and `M = 128m0`.
+
+Use [`sm1xx`](@ref) to produce one from a dense array.
+"""
 struct Sm1xxArray{T,N,X<:AbstractArray{T}} <: AbstractArray{T,N}
     ndims::Val{N}
     x::X
@@ -37,9 +47,15 @@ function Base.getindex(s::Sm1xxArray{T,N}, i::Vararg{Int,N}) where {T,N}
 end
 
 function Adapt.adapt_structure(to, arr::Sm1xxArray)
-    return Sm1xxArray(Adapt.adapt(to, parent(arr)))
+    return Sm1xxArray(adapt(to, parent(arr)))
 end
 
+"""
+    sm1xx(x::AbstractArray)
+
+Rearrange a dense `(K, M, ...)` scale-factor array into the swizzled tile
+layout and wrap it in an [`Sm1xxArray`](@ref).
+"""
 function sm1xx(x::AbstractArray)
     ndims(x) >= 2 || throw(ArgumentError("Dense array must have at least 2 dimensions to be converted to Sm1xx"))
     size(x, 1) >= k1 && size(x, 2) >= m1 * m2 || throw(ArgumentError("Size of Dense array must be (>$k1, >$(m1*m2), ...)"))

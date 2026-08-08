@@ -1,5 +1,7 @@
 [deps]
+BitPacking = "b58c8408-13c4-4787-8733-7038ae624acf"
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+Microfloats = "31c70f10-a750-4521-b13c-797315ae2933"
 Microscaling = "1a9757c6-0d28-4499-b7bb-62d38933090b"
 
 [compat]

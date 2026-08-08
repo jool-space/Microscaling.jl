@@ -1,5 +1,19 @@
+using Adapt
 using Rewrap: Unsqueeze, Keep, Split, Merge
 
+"""
+    BlockscaledArray{T}(x, p, block_size = size(p) .÷ size(x))
+    BlockscaledArray(x, p, args...)
+
+An `AbstractArray{T,N}` pairing an element array `p` with a scale array `x`,
+where each scale applies to one block of elements. Indexing returns
+`T(element) * T(scale)`.
+
+`block_size` gives the block extent along each dimension: an `Int` `k` means
+`k` consecutive elements share a scale, and `:` means the whole dimension
+shares a scale. Without `T`, the element type is promoted from `eltype(x)`
+and `eltype(p)` (`Float32` if the promotion is abstract).
+"""
 struct BlockscaledArray{
     T<:Number, N, K<:NTuple{N,Any},
     X<:AbstractArray{<:Number,N}, P<:AbstractArray{<:Number,N},
@@ -41,7 +55,7 @@ end
 function BlockscaledArray{T}(
     x::AbstractArray{<:Number,N},
     p::AbstractArray{<:Number,N},
-    block_size::NTuple{N,Union{Int,Colon}} = ntuple(i -> size(p, i) ÷ size(x, i), Val(N))
+    block_size::NTuple{N,Union{Int,Colon}} = size(p) .÷ size(x)
 ) where {T,N}
     K = Tuple{block_size...}
     return BlockscaledArray{T,N,K}(x, p)
@@ -57,9 +71,28 @@ function BlockscaledArray(x::AbstractArray, p::AbstractArray, args...; kws...)
 end
 
 Base.size(arr::BlockscaledArray, args...) = size(arr.p, args...)
+
+"""
+    block_size(arr::BlockscaledArray[, i])
+
+The block extent along each dimension, as a tuple of `Int`s and `Colon`s —
+or just its `i`-th entry.
+"""
 block_size(::BlockscaledArray{T,N,K}) where {T,N,K} = Tuple(K.parameters)
 block_size(arr::BlockscaledArray, i::Integer) = block_size(arr)[i]
+
+"""
+    scale_type(arr::BlockscaledArray)
+
+The element type of the scale array.
+"""
 scale_type(arr::BlockscaledArray) = eltype(arr.x)
+
+"""
+    element_type(arr::BlockscaledArray)
+
+The element type of the element array.
+"""
 element_type(arr::BlockscaledArray) = eltype(arr.p)
 
 Base.IndexStyle(::Type{<:BlockscaledArray}) = IndexCartesian()
@@ -67,8 +100,8 @@ Base.IndexStyle(::Type{<:BlockscaledArray}) = IndexCartesian()
 function Adapt.adapt_structure(
     to, arr::BlockscaledArray{T,N,K}
 ) where {T,N,K}
-    x = Adapt.adapt(to, arr.x)
-    p = Adapt.adapt(to, arr.p)
+    x = adapt(to, arr.x)
+    p = adapt(to, arr.p)
     return BlockscaledArray{T,N,K}(x, p)
 end
 
@@ -98,7 +131,18 @@ function Base.getindex(arr::BlockscaledArray{T,N}, i::Vararg{Int,N}) where {T,N}
     return value
 end
 
+"""
+    BlockscaledVector{T}
+
+Alias for [`BlockscaledArray`](@ref)`{T,1}`.
+"""
 const BlockscaledVector{T} = BlockscaledArray{T,1}
+
+"""
+    BlockscaledMatrix{T}
+
+Alias for [`BlockscaledArray`](@ref)`{T,2}`.
+"""
 const BlockscaledMatrix{T} = BlockscaledArray{T,2}
 
 function Base.copy(arr::BlockscaledArray{T,N}) where {T,N}

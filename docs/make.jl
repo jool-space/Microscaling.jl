@@ -1,10 +1,20 @@
 using Microscaling
+using Microfloats, BitPacking
 using Documenter
 
 DocMeta.setdocmeta!(Microscaling, :DocTestSetup, :(using Microscaling); recursive=true)
+DocMeta.setdocmeta!(Microfloats, :DocTestSetup, :(using Microfloats); recursive=true)
+DocMeta.setdocmeta!(BitPacking, :DocTestSetup, :(using BitPacking); recursive=true)
 
 makedocs(;
-    modules=[Microscaling],
+    # Microfloats and BitPacking are listed so `@docs` can pull in the
+    # docstrings of names Microscaling re-publics. Only a curated subset of
+    # their docstrings is included, so the missing-docs check is disabled,
+    # and cross-reference errors are downgraded (the included upstream
+    # docstrings link to names outside this manual).
+    modules=[Microscaling, Microfloats, BitPacking],
+    checkdocs=:none,
+    warnonly=[:cross_references],
     authors="AntonOresten <antonoresten@proton.me> and contributors",
     sitename="Microscaling.jl",
     format=Documenter.HTML(;
