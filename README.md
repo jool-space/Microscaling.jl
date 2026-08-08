@@ -7,5 +7,5 @@
 
 Array types for the [OCP Microscaling Formats (MX)](https://www.opencompute.org/documents/ocp-microscaling-formats-mx-v1-0-spec-final-pdf):
 
-- `BlockscaledArray` pairs narrow elements with per-block scales
+- `BlockscaledArray` pairs elements of any type with per-block scales; compose with `NarrowArray` to pack sub-byte elements
 - `Sm1xxArray` presents the swizzled scale layout used by SM 1xx (Blackwell) tensor cores.
