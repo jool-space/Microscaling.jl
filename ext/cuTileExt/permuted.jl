@@ -3,18 +3,6 @@ using Microscaling
 import cuTile as ct
 import Adapt
 
-"""
-    PermutedTileArray{T,N,perm,iperm,P<:ct.AbstractTileArray{T,N}}
-
-Lazy dimension permutation of an arbitrary `AbstractTileArray`, mirroring
-`Base.PermutedDimsArray`. `ct.load`/`ct.store` translate the logical (permuted)
-index and shape into the parent's physical dimension order, and permute the
-tile itself, so kernels can stay layout-agnostic.
-
-Plain `TileArray`s don't need this (their strides already encode any
-permutation); it exists for wrapper tile arrays whose layout is not expressible
-with strides, e.g. sub-byte packed elements or swizzled scale factors.
-"""
 struct PermutedTileArray{T,N,perm,iperm,P<:ct.AbstractTileArray{T,N}} <: ct.AbstractTileArray{T,N}
     parent::P
 end

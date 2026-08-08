@@ -7,7 +7,7 @@ import Adapt
 
 @reexport using BitPacking:
     NarrowArray, NarrowVector, NarrowMatrix,
-    bitwidth
+    Narrow, bitwidth
 
 include("blockscaling.jl")
 export BlockscaledArray, BlockscaledVector, BlockscaledMatrix

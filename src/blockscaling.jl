@@ -1,3 +1,5 @@
+using Rewrap: Unsqueeze, Keep, Split, Merge
+
 struct BlockscaledArray{
     T<:Number, N, K<:NTuple{N,Any},
     X<:AbstractArray{<:Number,N}, P<:AbstractArray{<:Number,N},
@@ -98,8 +100,6 @@ end
 
 const BlockscaledVector{T} = BlockscaledArray{T,1}
 const BlockscaledMatrix{T} = BlockscaledArray{T,2}
-
-using Rewrap
 
 function Base.copy(arr::BlockscaledArray{T,N}) where {T,N}
     x_singleton = reshape(T.(arr.x), ntuple(i -> isodd(i) ? Unsqueeze() : Keep(), Val(2N)))

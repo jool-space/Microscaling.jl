@@ -1,3 +1,5 @@
+using Einops: @rearrange
+
 const k1, m2, m1 = 4, 4, 32
 
 struct Sm1xxArray{T,N,X<:AbstractArray{T}} <: AbstractArray{T,N}
@@ -37,8 +39,6 @@ end
 function Adapt.adapt_structure(to, arr::Sm1xxArray)
     return Sm1xxArray(Adapt.adapt(to, parent(arr)))
 end
-
-using Einops: @rearrange
 
 function sm1xx(x::AbstractArray)
     ndims(x) >= 2 || throw(ArgumentError("Dense array must have at least 2 dimensions to be converted to Sm1xx"))

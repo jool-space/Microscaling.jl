@@ -58,20 +58,18 @@ _scale_mode(::Colon, ::Colon, ::Type{Float32}) = :scalar_f32
 
 const DeviceScalar{T<:Number} = CuArray{T,0}
 
-_mul!(C, Wt, X, α, β) = cuBLASLt.matmul!(C, Wt, X; α, β)
-
 function LinearAlgebra.mul!(C::CuMatrix,
                             Wt::Transpose{<:Any,<:BlockscaledMatrix},
                             X::BlockscaledMatrix,
                             α::Number, β::Number)
-    return _mul!(C, Wt, X, α, β)
+    return cuBLASLt.matmul!(C, Wt, X; α, β)
 end
 
 function LinearAlgebra.mul!(C::CuMatrix,
                             Wt::Transpose{<:Any,<:BlockscaledMatrix},
                             X::BlockscaledMatrix,
                             α::DeviceScalar, β::DeviceScalar)
-    return _mul!(C, Wt, X, α, β)
+    return cuBLASLt.matmul!(C, Wt, X; α, β)
 end
 
 end
