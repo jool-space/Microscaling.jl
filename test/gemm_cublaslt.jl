@@ -1,5 +1,6 @@
 using LinearAlgebra: mul!
 using BFloat16s
+using NNlib: batched_transpose
 
 @testset "cuBLASLt MXFP8 — mul!(C, W', X)" begin
     Random.seed!(2)
@@ -222,7 +223,7 @@ end
     @test isapprox(Array(C), C_ref; rtol = 1e-3, atol = 1e-3)
 end
 
-@testset "cuBLASLt batched MXFP8 — batched_mul!" begin
+@testset "cuBLASLt batched MXFP8 — matmul!" begin
     Random.seed!(13)
 
     Element = Float8_E4M3FN
@@ -245,12 +246,15 @@ end
 
     W = BlockscaledArray(sm1xx(CuArray(w_scale)), CuArray(w_data))
     X = BlockscaledArray(sm1xx(CuArray(x_scale)), CuArray(x_data))
-    D = CUDA.zeros(Float32, M, N, batch)
 
-    Wt = PermutedDimsArray(W, (2, 1, 3))
-    batched_mul!(D, Wt, X, 1.0f0, 0.0f0)
-
-    @test isapprox(Array(D), D_ref; rtol = 1e-5, atol = 1e-5)
+    @testset "$label" for (label, Wt) in (
+        "batched_transpose" => batched_transpose(W),
+        "PermutedDimsArray" => PermutedDimsArray(W, (2, 1, 3)),
+    )
+        D = CUDA.zeros(Float32, M, N, batch)
+        cuBLASLt.matmul!(D, Wt, X)
+        @test isapprox(Array(D), D_ref; rtol = 1e-5, atol = 1e-5)
+    end
 end
 
 if CUDA.capability(CUDA.device()).major == 9  # Hopper only
