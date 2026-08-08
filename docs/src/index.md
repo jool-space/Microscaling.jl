@@ -6,6 +6,14 @@ CurrentModule = Microscaling
 
 Array types for the [OCP Microscaling Formats (MX)](https://www.opencompute.org/documents/ocp-microscaling-formats-mx-v1-0-spec-final-pdf).
 
+## Installation
+
+```julia
+using Pkg
+Registry.add(url="https://registry.jool.space")
+Pkg.add("Microscaling")
+```
+
 ## Blockscaled arrays
 
 ```@docs
