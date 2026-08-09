@@ -1,14 +1,11 @@
 module cuBLASLtExt
 
-using LinearAlgebra: LinearAlgebra, Transpose
-
 using Microscaling:
     Sm1xxArray,
     Float8_E4M3FN, Float8_E8M0FNU,
-    BlockscaledArray, BlockscaledMatrix,
+    BlockscaledArray,
     block_size, scale_type
 
-using CUDACore: CuArray, CuMatrix
 import cuBLASLt
 
 cuBLASLt.ltptr(A::Sm1xxArray) = cuBLASLt.ltptr(parent(A))
@@ -55,21 +52,5 @@ function _scale_mode(k::Integer, m::Integer, ::Type{Float32})
 end
 
 _scale_mode(::Colon, ::Colon, ::Type{Float32}) = :scalar_f32
-
-const DeviceScalar{T<:Number} = CuArray{T,0}
-
-function LinearAlgebra.mul!(C::CuMatrix,
-                            Wt::Transpose{<:Any,<:BlockscaledMatrix},
-                            X::BlockscaledMatrix,
-                            α::Number, β::Number)
-    return cuBLASLt.matmul!(C, Wt, X; α, β)
-end
-
-function LinearAlgebra.mul!(C::CuMatrix,
-                            Wt::Transpose{<:Any,<:BlockscaledMatrix},
-                            X::BlockscaledMatrix,
-                            α::DeviceScalar, β::DeviceScalar)
-    return cuBLASLt.matmul!(C, Wt, X; α, β)
-end
 
 end

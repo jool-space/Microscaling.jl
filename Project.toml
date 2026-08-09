@@ -10,24 +10,21 @@ projects = ["test", "docs"]
 Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
 BitPacking = "b58c8408-13c4-4787-8733-7038ae624acf"
 Einops = "e3ce28c8-8bfb-4704-8add-e3e7f14b55c9"
-LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Microfloats = "31c70f10-a750-4521-b13c-797315ae2933"
 Republic = "27243419-9dde-4721-b67c-fd63626fea7f"
 Rewrap = "e37f04ce-ca06-4a96-b09f-ea39bec02b08"
 
 [weakdeps]
-CUDACore = "bd0ed864-bdfe-4181-a5ed-ce625a5fdea2"
 cuBLASLt = "448fee3d-7d89-4b6e-8554-2e2b5f03afa7"
 cuTile = "0dea8319-8c4a-4662-a73d-20234d115b9a"
 
 [extensions]
-cuBLASLtExt = ["cuBLASLt", "CUDACore"]
-cuTileExt = ["cuTile", "CUDACore"]
+cuBLASLtExt = "cuBLASLt"
+cuTileExt = "cuTile"
 
 [compat]
 Adapt = "4.6.0"
 BitPacking = "0.2.4"
-CUDACore = "6.2.1"
 Einops = "0.2.1"
 Microfloats = "0.2.3"
 Republic = "2.2"

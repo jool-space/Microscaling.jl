@@ -1,8 +1,7 @@
-using LinearAlgebra: mul!
 using BFloat16s
 using NNlib: batched_transpose
 
-@testset "cuBLASLt MXFP8 — mul!(C, W', X)" begin
+@testset "cuBLASLt MXFP8 — matmul!(C, W', X)" begin
     Random.seed!(2)
 
     Scale   = Float8_E8M0FNU
@@ -27,7 +26,7 @@ using NNlib: batched_transpose
         X = BlockscaledArray(sm1xx(CuArray(x_scale)), CuArray(x_data))
         C = CUDA.zeros(Float32, M, N)
 
-        mul!(C, transpose(W), X, 1.0f0, 0.0f0)
+        cuBLASLt.matmul!(C, transpose(W), X)
 
         @test isapprox(Array(C), C_ref; rtol = 1e-5, atol = 1e-5)
     end
@@ -56,7 +55,7 @@ end
         C_prev = CUDA.rand(Float32, M, N)
         C_expected = α .* C_ref .+ β .* Array(C_prev)
         C = copy(C_prev)
-        mul!(C, transpose(W), X, α, β)
+        cuBLASLt.matmul!(C, transpose(W), X; α, β)
         @test isapprox(Array(C), C_expected; rtol = 1e-5, atol = 1e-5)
     end
 end
@@ -86,7 +85,7 @@ end
         C_prev = CUDA.rand(Float32, M, N)
         C_expected = αv .* C_ref .+ βv .* Array(C_prev)
         C = copy(C_prev)
-        mul!(C, transpose(W), X, α, β)
+        cuBLASLt.matmul!(C, transpose(W), X; α, β)
         @test isapprox(Array(C), C_expected; rtol = 1e-5, atol = 1e-5)
     end
 
@@ -112,7 +111,7 @@ end
 
     @testset "Dtype=$Dtype" for Dtype in (Float32, Float16, BFloat16)
         C = CUDA.zeros(Dtype, M, N)
-        mul!(C, transpose(W), X, 1.0f0, 0.0f0)
+        cuBLASLt.matmul!(C, transpose(W), X)
         @test isapprox(Float32.(Array(C)), C_ref; rtol = 1e-2, atol = 1e-2)
     end
 end
@@ -138,12 +137,12 @@ end
 
     @testset "Dtype=$Dtype" for Dtype in (Float32, Float16, BFloat16)
         C = CUDA.zeros(Dtype, M, N)
-        mul!(C, transpose(W), X, 1.0f0, 0.0f0)
+        cuBLASLt.matmul!(C, transpose(W), X)
         @test isapprox(Float32.(Array(C)), C_ref; rtol = 1e-2, atol = 1e-2)
     end
 end
 
-@testset "cuBLASLt NVFP4 — mul!(C, W', X)" begin
+@testset "cuBLASLt NVFP4 — matmul!(C, W', X)" begin
     Random.seed!(5)
 
     Scale   = Float8_E4M3FN
@@ -168,7 +167,7 @@ end
         X = BlockscaledArray(sm1xx(CuArray(x_scale)), NarrowArray{Element}(CuArray(x_data)))
         C = CUDA.zeros(Float32, M, N)
 
-        mul!(C, transpose(W), X, 1.0f0, 0.0f0)
+        cuBLASLt.matmul!(C, transpose(W), X)
 
         @test isapprox(Array(C), C_ref; rtol = 1e-4, atol = 1e-4)
     end
@@ -195,12 +194,12 @@ end
 
     @testset "Dtype=$Dtype" for Dtype in (Float32, Float16, BFloat16)
         C = CUDA.zeros(Dtype, M, N)
-        mul!(C, transpose(W), X, 1.0f0, 0.0f0)
+        cuBLASLt.matmul!(C, transpose(W), X)
         @test isapprox(Float32.(Array(C)), C_ref; rtol = 1e-2, atol = 1e-2)
     end
 end
 
-@testset "cuBLASLt tensorwide FP8 — mul!(C, W', X)" begin
+@testset "cuBLASLt tensorwide FP8 — matmul!(C, W', X)" begin
     Random.seed!(12)
 
     Element = Float8_E4M3FN
@@ -218,7 +217,7 @@ end
     X = BlockscaledArray{Float32}(CuArray(reshape(x_scale, 1, 1)), CuArray(x_data), (:, :))
     C = CUDA.zeros(Float32, M, N)
 
-    mul!(C, transpose(W), X, 1.0f0, 0.0f0)
+    cuBLASLt.matmul!(C, transpose(W), X)
 
     @test isapprox(Array(C), C_ref; rtol = 1e-3, atol = 1e-3)
 end
@@ -259,7 +258,7 @@ end
 
 if CUDA.capability(CUDA.device()).major == 9  # Hopper only
 
-@testset "cuBLASLt VEC128 FP8 — mul!(C, W', X)" begin
+@testset "cuBLASLt VEC128 FP8 — matmul!(C, W', X)" begin
     Random.seed!(10)
 
     Element = Float8_E4M3FN
@@ -283,13 +282,13 @@ if CUDA.capability(CUDA.device()).major == 9  # Hopper only
         X = BlockscaledArray{Float32}(CuArray(x_scale), CuArray(x_data))
         C = CUDA.zeros(Float32, M, N)
 
-        mul!(C, transpose(W), X, 1.0f0, 0.0f0)
+        cuBLASLt.matmul!(C, transpose(W), X)
 
         @test isapprox(Array(C), C_ref; rtol = 1e-2, atol = 1e-2)
     end
 end
 
-@testset "cuBLASLt BLK128x128 × VEC128 — mul!(C, W', X)" begin
+@testset "cuBLASLt BLK128x128 × VEC128 — matmul!(C, W', X)" begin
     Random.seed!(11)
 
     Element = Float8_E4M3FN
@@ -309,7 +308,7 @@ end
     X = BlockscaledArray{Float32}(CuArray(x_scale), CuArray(x_data))
     C = CUDA.zeros(Float32, M, N)
 
-    mul!(C, transpose(W), X, 1.0f0, 0.0f0)
+    cuBLASLt.matmul!(C, transpose(W), X)
 
     @test isapprox(Array(C), C_ref; rtol = 1e-2, atol = 1e-2)
 end
@@ -337,5 +336,5 @@ end # Hopper only (sm_90)
     X_raw = BlockscaledArray(x_scale, x_data)
     @test_throws ArgumentError cuBLASLt.scale_mode(W_raw)
     C = CUDA.zeros(Float32, M, N)
-    @test_throws ArgumentError mul!(C, transpose(W_raw), X_raw, 1.0f0, 0.0f0)
+    @test_throws ArgumentError cuBLASLt.matmul!(C, transpose(W_raw), X_raw)
 end

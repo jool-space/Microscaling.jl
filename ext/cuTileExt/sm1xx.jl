@@ -2,7 +2,7 @@ using Microscaling
 
 import cuTile as ct
 import Adapt
-using Einops: @rearrange
+using Einops: @reshape, @rearrange
 
 struct Sm1xxTileArray{T,N,A<:ct.TileArray{T}} <: ct.AbstractTileArray{T,N}
     size::NTuple{N,Int}
@@ -14,20 +14,15 @@ Base.size(s::Sm1xxTileArray) = s.size
 Base.eltype(::Sm1xxTileArray{T}) where T = T
 Base.ndims(::Sm1xxTileArray{T,N}) where {T,N} = N
 
-function Adapt.adapt_structure(to::ct.KernelAdaptor, arr::Sm1xxArray)
-    return Sm1xxTileArray(
-        size(arr),
-        Adapt.adapt(
-            to,
-            @rearrange(parent(arr), "k1 m2 m1 k0 m0 ... -> (k1 m2 m1) k0 m0 ...")
-        )
-    )
+function Adapt.adapt_structure(to::ct.KernelAdaptor, x::Sm1xxArray)
+    # for coalesced loads
+    x′ = @reshape(parent(x), "k1 m2 m1 k0 m0 ... -> (k1 m2 m1) k0 m0 ...")
+    return Sm1xxTileArray(size(x), Adapt.adapt(to, x′))
 end
 
 function ct.load(
     arr::Sm1xxTileArray,
-    index, shape;
-    kws...
+    index, shape; kws...
 )
     k1, m2, m1 = 4, 4, 32
     shape′ = (
