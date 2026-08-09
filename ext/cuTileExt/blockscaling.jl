@@ -23,6 +23,8 @@ Base.size(arr::BlockscaledTileArray, args...) = size(arr.p, args...)
 block_size(::BlockscaledTileArray{T,N,K}) where {T,N,K} = Tuple(K.parameters)
 block_size(arr::BlockscaledTileArray, i::Integer) = block_size(arr)[i]
 
+Base.transpose(arr::BlockscaledTileArray{<:Any,2}) = PermutedTileArray(arr, (2,1))
+
 struct BlockscaledTile{T,X<:ct.Tile,P<:ct.Tile}
     x::X
     p::P
