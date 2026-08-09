@@ -20,12 +20,6 @@ struct BlockscaledArray{
 } <: AbstractArray{T,N}
     x::X
     p::P
-    function BlockscaledArray{T,N,K,X,P}(x::X, p::P) where {
-        T<:Number, N, K<:NTuple{N,Any},
-        X<:AbstractArray{<:Number,N}, P<:AbstractArray{<:Number,N}
-    }
-        new{T,N,K,X,P}(x, p)
-    end
 end
 
 function BlockscaledArray{T,N,K}(x::X, p::P) where {
