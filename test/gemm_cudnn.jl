@@ -197,46 +197,81 @@ end
     c = tensor!(g; dims=(M, N, batch), dtype=Float32, output=true, name="C")
     matmul!(g, a, b; c)
 
-    if is_supported(g)
+    # measured supported on sm_121 / cuDNN 9.24
+    @test is_supported(g) == cudnn_blockscale_claimed
+    if cudnn_blockscale_claimed
         blockscaled_matmul!(D, g, W, X)
         @test isapprox(Array(D), D_ref; rtol = 1e-5, atol = 1e-5)
-    else
-        @test_skip cudnn_blockscale_claimed
     end
 end
 
-@testset "cuDNN MXFP8 — quantize round trip" begin
-    # quantize Float32 → MXFP8 through cuDNN, writing elements and swizzled
-    # scales straight into a BlockscaledArray, then check the dequantized
-    # values reproduce the input within block-quantization error. Wrong scale
-    # bytes (a mislaid swizzle) miss by powers of two, so the loose tolerance
-    # still catches layout errors.
+@testset "cuDNN MXFP8 — fused matmul→quantize pipeline" begin
+    # the full MXFP8 pipeline in one graph: dequantize both operands, matmul
+    # into a virtual f32 tensor, and quantize it back to MXFP8 (elements +
+    # swizzled scales written straight into a BlockscaledArray). The
+    # dequantized result must reproduce the f32 gemm within block-quantization
+    # error; wrong scale bytes (a mislaid swizzle) miss by powers of two, so
+    # the loose tolerance still catches layout errors. This is also the
+    # positive control for the quantize node: NVIDIA's sample only blesses
+    # quantize fused after a matmul, and this test proving the node numerically
+    # is what licenses reading the standalone-quantize claim below as "no
+    # engine" rather than "wrong graph".
     Random.seed!(19)
 
     Scale   = Float8_E8M0FNU
     Element = Float8_E4M3FN
     block = 32
-    K, N = 256, 256
+    M, N, K = 256, 256, 256
     K_s = K ÷ block
 
-    x = CUDA.rand(Float32, K, N) .+ 0.5f0
+    w_data  = Element.(randn(K, M))
+    x_data  = Element.(randn(K, N))
+    w_scale = Scale.(rand(K_s, M) / √K)
+    x_scale = Scale.(rand(K_s, N) / √K)
 
-    g = Graph()
-    tx = tensor!(g, reshape(x, K, N, 1); name="X")
-    ty, tscale = block_scale_quantize!(g, tx; block_size=block, block_dim=1,
+    C_ref = blockscaled_gemm_reference(w_data, w_scale, x_data, x_scale, block)
+
+    W = BlockscaledArray(sm1xx(CuArray(w_scale)), CuArray(w_data))
+    X = BlockscaledArray(sm1xx(CuArray(x_scale)), CuArray(x_data))
+
+    g = Graph(intermediate_dtype=Float32, compute_dtype=Float32)
+    a = tensor!(g, PermutedDimsArray(W, (2, 1)); name="A")
+    b = tensor!(g, X; name="B")
+    c = matmul!(g, a, b)                       # virtual (M, N, 1) f32
+    ty, tscale = block_scale_quantize!(g, c; block_size=block, block_dim=1,
                                        dtype=Element, scale_dtype=Scale)
 
+    # quantized output blocks along M (dimension 1), feeding a next gemm that
+    # reduces over M; scales land in the swizzled layout
     D = BlockscaledArray(
-        Sm1xxArray(CuArray{Scale}(undef, 4, 4, 32, K_s ÷ 4, N ÷ 128)),
-        CuArray{Element}(undef, K, N))
+        Sm1xxArray(CuArray{Scale}(undef, 4, 4, 32, (M ÷ block) ÷ 4, N ÷ 128)),
+        CuArray{Element}(undef, M, N))
 
     if is_supported(g)
-        execute!(g, tensor(g, "X") => reshape(x, K, N, 1),
+        execute!(g, tensor(g, "A.data") => W, tensor(g, "A.scale") => W,
+                    tensor(g, "B.data") => X, tensor(g, "B.scale") => X,
                     ty => D, tscale => D)
-        @test isapprox(Float32.(Array(copy(D))), Array(x); rtol = 0.15, atol = 0.15)
+        @test isapprox(Float32.(Array(copy(D))), C_ref; rtol = 0.15, atol = 0.15)
     else
         @test_skip cudnn_blockscale_claimed
     end
+end
+
+@testset "cuDNN MXFP8 — standalone quantize has no engine" begin
+    # a lone quantize graph finalizes (the descriptors are valid) but no
+    # engine takes it, measured on sm_121 / cuDNN 9.24 — consistent with
+    # NVIDIA's sample, which only shows quantize fused after a matmul. If this
+    # starts failing on newer cuDNN or other hardware, standalone quantize has
+    # gained an engine: flip the claim and add numerics.
+    Scale   = Float8_E8M0FNU
+    Element = Float8_E4M3FN
+    K, N = 256, 256
+
+    g = Graph()
+    tx = tensor!(g; dims=(K, N, 1), dtype=Float32, name="X")
+    block_scale_quantize!(g, tx; block_size=32, block_dim=1,
+                          dtype=Element, scale_dtype=Scale)
+    @test !is_supported(g)
 end
 
 @testset "cuDNN — tensor presentation" begin
