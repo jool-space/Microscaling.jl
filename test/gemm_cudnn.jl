@@ -247,13 +247,13 @@ end
         Sm1xxArray(CuArray{Scale}(undef, 4, 4, 32, (M ÷ block) ÷ 4, N ÷ 128)),
         CuArray{Element}(undef, M, N))
 
-    if is_supported(g)
+    # measured supported on sm_121 / cuDNN 9.24
+    @test is_supported(g) == cudnn_blockscale_claimed
+    if cudnn_blockscale_claimed
         execute!(g, tensor(g, "A.data") => W, tensor(g, "A.scale") => W,
                     tensor(g, "B.data") => X, tensor(g, "B.scale") => X,
                     ty => D, tscale => D)
         @test isapprox(Float32.(Array(copy(D))), C_ref; rtol = 0.15, atol = 0.15)
-    else
-        @test_skip cudnn_blockscale_claimed
     end
 end
 
