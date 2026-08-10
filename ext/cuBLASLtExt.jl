@@ -17,7 +17,7 @@ function cuBLASLt.scale_mode(A::BlockscaledArray{<:Any,N}) where {N}
     2 <= N <= 3 || throw(ArgumentError(
         "cuBLASLt matmul takes matrices or 3-dimensional batches; got $(N)D"))
     mode = _scale_mode(block_size(A), scale_type(A))
-    check_swizzled(A.x, mode)
+    check_scale_layout(A.x, mode)
     return mode
 end
 
@@ -46,15 +46,38 @@ function _scale_mode(block::Tuple, ::Type{S}) where {S}
     return _matrix_scale_mode(k, outer, S)
 end
 
-# cuBLASLt accesses block-mode scales through its swizzled 128×4-entry tiled
-# layout, but only ever sees a raw pointer, so it cannot verify the layout
-# itself: unswizzled scales are silently misread, or read out of bounds. An
-# Sm1xxArray is swizzled and tile-padded by construction.
-function check_swizzled(x, mode::Symbol)
-    mode in (:vec32_ue8m0, :vec16_ue4m3) || return nothing
-    x isa Sm1xxArray || throw(ArgumentError(
-        "cuBLASLt accesses :$mode scales through a swizzled tiled layout, " *
-        "but the scales are a $(nameof(typeof(x))); wrap them with `sm1xx`"))
+# cuBLASLt only ever sees a raw scale pointer, so it cannot verify layouts
+# itself: mislaid scales are silently misread, or read out of bounds. Each
+# mode's memory contract is enforced here instead.
+#
+# The MX modes read through a swizzled 128×4-entry tiled layout; an Sm1xxArray
+# is swizzled and tile-padded by construction. The Hopper f32 modes read plain
+# arrays, but with fixed orientations (cuBLAS docs, "Scaling factors
+# layouts"): :vec128_f32 scales are OUTER-major — memory shape outer × K÷128,
+# the transpose of the (K÷128, outer) block-scale geometry — and
+# :blk128x128_f32 scales are K-major with the stride between outer-block
+# columns a multiple of 4 (pad K÷128 up to 4). Both coincide with a plain
+# column-major scale array only in the degenerate single-column cases, which
+# is exactly why a mislaid array cannot be caught by shape alone.
+function check_scale_layout(x, mode::Symbol)
+    if mode in (:vec32_ue8m0, :vec16_ue4m3)
+        x isa Sm1xxArray || throw(ArgumentError(
+            "cuBLASLt accesses :$mode scales through a swizzled tiled layout, " *
+            "but the scales are a $(nameof(typeof(x))); wrap them with `sm1xx`"))
+    elseif mode === :vec128_f32
+        outer_major = (size(x, 2) == 1 || stride(x, 2) == 1) &&
+                      (size(x, 1) == 1 || stride(x, 1) == size(x, 2))
+        outer_major || throw(ArgumentError(
+            "cuBLASLt reads :vec128_f32 scales outer-major (dense outer × K÷128 " *
+            "in memory), but this scale array is K-major; store the scales " *
+            "transposed, e.g. `transpose(outer_by_kblocks)`"))
+    elseif mode === :blk128x128_f32
+        padded = stride(x, 1) == 1 && (size(x, 2) == 1 || stride(x, 2) % 4 == 0)
+        padded || throw(ArgumentError(
+            "cuBLASLt reads :blk128x128_f32 scales K-major with the stride " *
+            "between outer-block columns a multiple of 4; pad the K÷128 " *
+            "dimension up to a multiple of 4 and pass a view of the padding"))
+    end
     return nothing
 end
 

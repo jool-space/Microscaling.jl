@@ -285,6 +285,10 @@ end  # Ada and later (CC ≥ 8.9)
 
 if v"9.0" <= CC < v"10.0"  # Hopper only: f32 128-block scale modes
 
+# cuBLASLt reads :vec128_f32 scales outer-major: dense outer × K÷128 memory,
+# the transpose of the (K÷128, outer) block-scale geometry
+outer_major(scale) = transpose(CuArray(permutedims(scale)))
+
 @testset "cuBLASLt VEC128 FP8 — matmul!(C, W', X)" begin
     Random.seed!(10)
 
@@ -305,8 +309,8 @@ if v"9.0" <= CC < v"10.0"  # Hopper only: f32 128-block scale modes
 
         C_ref = blockscaled_gemm_reference(w_data, w_scale, x_data, x_scale, block)
 
-        W = BlockscaledArray{Float32}(CuArray(w_scale), CuArray(w_data))
-        X = BlockscaledArray{Float32}(CuArray(x_scale), CuArray(x_data))
+        W = BlockscaledArray{Float32}(outer_major(w_scale), CuArray(w_data))
+        X = BlockscaledArray{Float32}(outer_major(x_scale), CuArray(x_data))
         C = CUDA.zeros(Float32, M, N)
 
         @test cuBLASLt.matmul_supported(C, transpose(W), X)
@@ -333,7 +337,7 @@ end
         x_block_size=(128, 128), y_block_size=128)
 
     W = BlockscaledArray{Float32}(CuArray(w_scale), CuArray(w_data), (128, 128))
-    X = BlockscaledArray{Float32}(CuArray(x_scale), CuArray(x_data))
+    X = BlockscaledArray{Float32}(outer_major(x_scale), CuArray(x_data))
     C = CUDA.zeros(Float32, M, N)
 
     @test cuBLASLt.matmul_supported(C, transpose(W), X)
@@ -478,4 +482,24 @@ end
     W4 = BlockscaledArray{Float32}(CUDA.rand(Float32, 1, M, 2, 2),
                                    data(K, M, 2, 2), (:, 1, 1, 1))
     @test_throws ArgumentError cuBLASLt.scale_mode(W4)
+
+    # Hopper f32 layout contracts (per cuBLAS "Scaling factors layouts"):
+    # :vec128_f32 scales are outer-major — the transpose of the natural
+    # (K÷128, outer) geometry — so a plain K-major array must be refused;
+    # the two layouts only coincide for K ≤ 128
+    Kb, Mb = 256, 256
+    W_vec = BlockscaledArray{Float32}(transpose(CUDA.rand(Float32, Mb, 2)),
+                                      data(Kb, Mb))
+    @test cuBLASLt.scale_mode(W_vec) == :vec128_f32
+    W_kmaj = BlockscaledArray{Float32}(CUDA.rand(Float32, 2, Mb), data(Kb, Mb))
+    @test_throws ArgumentError cuBLASLt.scale_mode(W_kmaj)
+
+    # :blk128x128_f32 scales are K-major with the K÷128 dimension padded to a
+    # multiple of 4: a view into padded storage passes, unpadded is refused
+    W_pad = BlockscaledArray{Float32}(view(CUDA.rand(Float32, 4, 2), 1:2, :),
+                                      data(Kb, Mb), (128, 128))
+    @test cuBLASLt.scale_mode(W_pad) == :blk128x128_f32
+    W_nopad = BlockscaledArray{Float32}(CUDA.rand(Float32, 2, 2),
+                                        data(Kb, Mb), (128, 128))
+    @test_throws ArgumentError cuBLASLt.scale_mode(W_nopad)
 end
