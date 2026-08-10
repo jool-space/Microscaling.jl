@@ -9,6 +9,7 @@ NNlib = "872c559c-99b0-510c-b3b7-b6c96a88d5cd"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 cuBLASLt = "448fee3d-7d89-4b6e-8554-2e2b5f03afa7"
+cuDNN = "02a925ec-e4fe-4b08-9a7e-0d78e3d38ccd"
 cuTile = "0dea8319-8c4a-4662-a73d-20234d115b9a"
 
 [compat]

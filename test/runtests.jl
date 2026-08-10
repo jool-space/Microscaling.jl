@@ -38,5 +38,6 @@ end
             @info "skipping cuTile gemm testsets (CC ≥ 10.0 required)"
         end
         include("gemm_cublaslt.jl")
+        include("gemm_cudnn.jl")
     end
 end
