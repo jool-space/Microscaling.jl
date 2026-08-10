@@ -1,5 +1,6 @@
 import cuDNN
-using cuDNN: Graph, tensor, tensor!, matmul!, execute!, is_supported
+using cuDNN: Graph, tensor, tensor!, matmul!, execute!, is_supported,
+    block_scale_quantize!
 
 @assert !isnothing(Base.get_extension(Microscaling, :cuDNNExt))
 
@@ -157,6 +158,82 @@ end
     if is_supported(g)
         blockscaled_matmul!(D, g, W, X)
         @test isapprox(Array(D), D_ref; rtol = 1e-5, atol = 1e-5)
+    else
+        @test_skip cudnn_blockscale_claimed
+    end
+end
+
+@testset "cuDNN broadcast-batch MXFP8 — shared W, batched X" begin
+    # the inference shape: one quantized weight matrix against a batch of
+    # activations, batch-1 operand broadcast by the matmul. Engine support for
+    # broadcasting a dequantize output is unverified, so this skips (rather
+    # than claims) when unsupported.
+    Random.seed!(17)
+
+    Scale   = Float8_E8M0FNU
+    Element = Float8_E4M3FN
+    block = 32
+    M, N, K = 256, 256, 256
+    batch = 4
+    K_s = K ÷ block
+
+    w_data  = Element.(randn(K, M))
+    x_data  = Element.(randn(K, N, batch))
+    w_scale = Scale.(rand(K_s, M))
+    x_scale = Scale.(rand(K_s, N, batch))
+
+    D_ref = stack(1:batch) do b
+        blockscaled_gemm_reference(
+            w_data, w_scale, x_data[:,:,b], x_scale[:,:,b], block)
+    end
+
+    W = BlockscaledArray(sm1xx(CuArray(w_scale)), CuArray(w_data))
+    X = BlockscaledArray(sm1xx(CuArray(x_scale)), CuArray(x_data))
+    D = CUDA.zeros(Float32, M, N, batch)
+
+    g = Graph(io_dtype=Float32, intermediate_dtype=Float32, compute_dtype=Float32)
+    a = tensor!(g, PermutedDimsArray(W, (2, 1)); name="A")    # (M, K, 1)
+    b = tensor!(g, X; name="B")                               # (K, N, batch)
+    c = tensor!(g; dims=(M, N, batch), dtype=Float32, output=true, name="C")
+    matmul!(g, a, b; c)
+
+    if is_supported(g)
+        blockscaled_matmul!(D, g, W, X)
+        @test isapprox(Array(D), D_ref; rtol = 1e-5, atol = 1e-5)
+    else
+        @test_skip cudnn_blockscale_claimed
+    end
+end
+
+@testset "cuDNN MXFP8 — quantize round trip" begin
+    # quantize Float32 → MXFP8 through cuDNN, writing elements and swizzled
+    # scales straight into a BlockscaledArray, then check the dequantized
+    # values reproduce the input within block-quantization error. Wrong scale
+    # bytes (a mislaid swizzle) miss by powers of two, so the loose tolerance
+    # still catches layout errors.
+    Random.seed!(19)
+
+    Scale   = Float8_E8M0FNU
+    Element = Float8_E4M3FN
+    block = 32
+    K, N = 256, 256
+    K_s = K ÷ block
+
+    x = CUDA.rand(Float32, K, N) .+ 0.5f0
+
+    g = Graph()
+    tx = tensor!(g, reshape(x, K, N, 1); name="X")
+    ty, tscale = block_scale_quantize!(g, tx; block_size=block, block_dim=1,
+                                       dtype=Element, scale_dtype=Scale)
+
+    D = BlockscaledArray(
+        Sm1xxArray(CuArray{Scale}(undef, 4, 4, 32, K_s ÷ 4, N ÷ 128)),
+        CuArray{Element}(undef, K, N))
+
+    if is_supported(g)
+        execute!(g, tensor(g, "X") => reshape(x, K, N, 1),
+                    ty => D, tscale => D)
+        @test isapprox(Float32.(Array(copy(D))), Array(x); rtol = 0.15, atol = 0.15)
     else
         @test_skip cudnn_blockscale_claimed
     end
