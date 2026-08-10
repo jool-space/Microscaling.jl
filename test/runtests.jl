@@ -29,8 +29,14 @@ end
     include("sm1xx.jl")
 
     if CUDA.functional()
-        include("gemm_agnostic.jl")
-        include("gemm_mxfp8.jl")
+        # the cuTile gemms lean on Blackwell (narrow-type loads, tcgen05
+        # block-scaled MMA); gemm_cublaslt.jl carries its own capability gates
+        if CUDA.capability(CUDA.device()) >= v"10.0"
+            include("gemm_agnostic.jl")
+            include("gemm_mxfp8.jl")
+        else
+            @info "skipping cuTile gemm testsets (CC ≥ 10.0 required)"
+        end
         include("gemm_cublaslt.jl")
     end
 end

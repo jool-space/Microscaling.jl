@@ -1,6 +1,14 @@
 using BFloat16s
 using NNlib: batched_transpose
 
+# Each capability section below states where support is *claimed*; inside the
+# testsets, `@test matmul_supported(...)` holds the library to that claim, so
+# a wrong gate fails loudly on capable hardware instead of erroring (too wide)
+# or silently skipping (too narrow).
+CC = CUDA.capability(CUDA.device())
+
+if CC >= v"10.0"  # Blackwell: MXFP8/NVFP4 block-scaled formats
+
 @testset "cuBLASLt MXFP8 — matmul!(C, W', X)" begin
     Random.seed!(2)
 
@@ -26,6 +34,7 @@ using NNlib: batched_transpose
         X = BlockscaledArray(sm1xx(CuArray(x_scale)), CuArray(x_data))
         C = CUDA.zeros(Float32, M, N)
 
+        @test cuBLASLt.matmul_supported(C, transpose(W), X)
         cuBLASLt.matmul!(C, transpose(W), X)
 
         @test isapprox(Array(C), C_ref; rtol = 1e-5, atol = 1e-5)
@@ -55,6 +64,7 @@ end
         C_prev = CUDA.rand(Float32, M, N)
         C_expected = α .* C_ref .+ β .* Array(C_prev)
         C = copy(C_prev)
+        @test cuBLASLt.matmul_supported(C, transpose(W), X; α, β)
         cuBLASLt.matmul!(C, transpose(W), X; α, β)
         @test isapprox(Array(C), C_expected; rtol = 1e-5, atol = 1e-5)
     end
@@ -85,6 +95,7 @@ end
         C_prev = CUDA.rand(Float32, M, N)
         C_expected = αv .* C_ref .+ βv .* Array(C_prev)
         C = copy(C_prev)
+        @test cuBLASLt.matmul_supported(C, transpose(W), X; α, β)
         cuBLASLt.matmul!(C, transpose(W), X; α, β)
         @test isapprox(Array(C), C_expected; rtol = 1e-5, atol = 1e-5)
     end
@@ -111,6 +122,7 @@ end
 
     @testset "Dtype=$Dtype" for Dtype in (Float32, Float16, BFloat16)
         C = CUDA.zeros(Dtype, M, N)
+        @test cuBLASLt.matmul_supported(C, transpose(W), X)
         cuBLASLt.matmul!(C, transpose(W), X)
         @test isapprox(Float32.(Array(C)), C_ref; rtol = 1e-2, atol = 1e-2)
     end
@@ -137,6 +149,7 @@ end
 
     @testset "Dtype=$Dtype" for Dtype in (Float32, Float16, BFloat16)
         C = CUDA.zeros(Dtype, M, N)
+        @test cuBLASLt.matmul_supported(C, transpose(W), X)
         cuBLASLt.matmul!(C, transpose(W), X)
         @test isapprox(Float32.(Array(C)), C_ref; rtol = 1e-2, atol = 1e-2)
     end
@@ -167,6 +180,7 @@ end
         X = BlockscaledArray(sm1xx(CuArray(x_scale)), NarrowArray{Element}(CuArray(x_data)))
         C = CUDA.zeros(Float32, M, N)
 
+        @test cuBLASLt.matmul_supported(C, transpose(W), X)
         cuBLASLt.matmul!(C, transpose(W), X)
 
         @test isapprox(Array(C), C_ref; rtol = 1e-4, atol = 1e-4)
@@ -194,32 +208,10 @@ end
 
     @testset "Dtype=$Dtype" for Dtype in (Float32, Float16, BFloat16)
         C = CUDA.zeros(Dtype, M, N)
+        @test cuBLASLt.matmul_supported(C, transpose(W), X)
         cuBLASLt.matmul!(C, transpose(W), X)
         @test isapprox(Float32.(Array(C)), C_ref; rtol = 1e-2, atol = 1e-2)
     end
-end
-
-@testset "cuBLASLt tensorwide FP8 — matmul!(C, W', X)" begin
-    Random.seed!(12)
-
-    Element = Float8_E4M3FN
-    M, N, K = 256, 256, 256
-
-    w_data  = Element.(randn(K, M))
-    x_data  = Element.(randn(K, N))
-    w_scale = Float32[0.5]
-    x_scale = Float32[0.25]
-
-    C_ref = Float32.(w_data) .* w_scale[1]
-    C_ref = transpose(C_ref) * (Float32.(x_data) .* x_scale[1])
-
-    W = BlockscaledArray{Float32}(CuArray(reshape(w_scale, 1, 1)), CuArray(w_data), (:, :))
-    X = BlockscaledArray{Float32}(CuArray(reshape(x_scale, 1, 1)), CuArray(x_data), (:, :))
-    C = CUDA.zeros(Float32, M, N)
-
-    cuBLASLt.matmul!(C, transpose(W), X)
-
-    @test isapprox(Array(C), C_ref; rtol = 1e-3, atol = 1e-3)
 end
 
 @testset "cuBLASLt batched MXFP8 — matmul!" begin
@@ -251,12 +243,47 @@ end
         "PermutedDimsArray" => PermutedDimsArray(W, (2, 1, 3)),
     )
         D = CUDA.zeros(Float32, M, N, batch)
+        @test cuBLASLt.matmul_supported(D, Wt, X)
         cuBLASLt.matmul!(D, Wt, X)
         @test isapprox(Array(D), D_ref; rtol = 1e-5, atol = 1e-5)
     end
 end
 
-if CUDA.capability(CUDA.device()).major == 9  # Hopper only
+else
+@info "skipping MXFP8/NVFP4 block-scaled matmul testsets (CC ≥ 10.0 required, device is $CC)"
+end  # Blackwell (CC ≥ 10.0)
+
+if CC >= v"8.9"  # Ada and later: FP8 with tensorwide scalar scales
+
+@testset "cuBLASLt tensorwide FP8 — matmul!(C, W', X)" begin
+    Random.seed!(12)
+
+    Element = Float8_E4M3FN
+    M, N, K = 256, 256, 256
+
+    w_data  = Element.(randn(K, M))
+    x_data  = Element.(randn(K, N))
+    w_scale = Float32[0.5]
+    x_scale = Float32[0.25]
+
+    C_ref = Float32.(w_data) .* w_scale[1]
+    C_ref = transpose(C_ref) * (Float32.(x_data) .* x_scale[1])
+
+    W = BlockscaledArray{Float32}(CuArray(reshape(w_scale, 1, 1)), CuArray(w_data), (:, :))
+    X = BlockscaledArray{Float32}(CuArray(reshape(x_scale, 1, 1)), CuArray(x_data), (:, :))
+    C = CUDA.zeros(Float32, M, N)
+
+    @test cuBLASLt.matmul_supported(C, transpose(W), X)
+    cuBLASLt.matmul!(C, transpose(W), X)
+
+    @test isapprox(Array(C), C_ref; rtol = 1e-3, atol = 1e-3)
+end
+
+else
+@info "skipping tensorwide FP8 matmul testset (CC ≥ 8.9 required, device is $CC)"
+end  # Ada and later (CC ≥ 8.9)
+
+if v"9.0" <= CC < v"10.0"  # Hopper only: f32 128-block scale modes
 
 @testset "cuBLASLt VEC128 FP8 — matmul!(C, W', X)" begin
     Random.seed!(10)
@@ -282,6 +309,7 @@ if CUDA.capability(CUDA.device()).major == 9  # Hopper only
         X = BlockscaledArray{Float32}(CuArray(x_scale), CuArray(x_data))
         C = CUDA.zeros(Float32, M, N)
 
+        @test cuBLASLt.matmul_supported(C, transpose(W), X)
         cuBLASLt.matmul!(C, transpose(W), X)
 
         @test isapprox(Array(C), C_ref; rtol = 1e-2, atol = 1e-2)
@@ -308,12 +336,79 @@ end
     X = BlockscaledArray{Float32}(CuArray(x_scale), CuArray(x_data))
     C = CUDA.zeros(Float32, M, N)
 
+    @test cuBLASLt.matmul_supported(C, transpose(W), X)
     cuBLASLt.matmul!(C, transpose(W), X)
 
     @test isapprox(Array(C), C_ref; rtol = 1e-2, atol = 1e-2)
 end
 
-end # Hopper only (sm_90)
+else
+@info "skipping VEC128/BLK128x128 matmul testsets (Hopper only, device is $CC)"
+end  # Hopper only (sm_90)
+
+# Outer-vec is one of the 12.9 Hopper f32 scaling schemes (sm_89 and sm_121
+# both answer matmul_supported = false); per-batch scalar's support surface is
+# undocumented, with datacenter Blackwell the remaining untested claim.
+if v"9.0" <= CC < v"10.0"
+
+@testset "cuBLASLt outer-vec FP8 — matmul!(C, W', X)" begin
+    Random.seed!(14)
+
+    Element = Float8_E4M3FN
+    M, N, K = 256, 256, 256
+
+    w_data  = Element.(randn(K, M))
+    x_data  = Element.(randn(K, N))
+    w_scale = Float32.(rand(1, M) / √K)
+    x_scale = Float32.(rand(1, N) / √K)
+
+    C_ref = blockscaled_gemm_reference(w_data, w_scale, x_data, x_scale, (K, 1))
+
+    W = BlockscaledArray{Float32}(CuArray(w_scale), CuArray(w_data), (:, 1))
+    X = BlockscaledArray{Float32}(CuArray(x_scale), CuArray(x_data), (:, 1))
+    C = CUDA.zeros(Float32, M, N)
+
+    @test cuBLASLt.matmul_supported(C, transpose(W), X)
+    cuBLASLt.matmul!(C, transpose(W), X)
+
+    @test isapprox(Array(C), C_ref; rtol = 1e-2, atol = 1e-2)
+end
+
+else
+@info "skipping outer-vec FP8 matmul testset (Hopper only claimed, device is $CC)"
+end
+
+if v"10.0" <= CC < v"12.0" && cuBLASLt.version() >= v"13.1"
+
+@testset "cuBLASLt per-batch scalar FP8 — matmul!" begin
+    Random.seed!(15)
+
+    Element = Float8_E4M3FN
+    M, N, K, batch = 256, 256, 256, 4
+
+    w_data  = Element.(randn(K, M, batch))
+    x_data  = Element.(randn(K, N, batch))
+    w_scale = Float32.(rand(1, 1, batch))
+    x_scale = Float32.(rand(1, 1, batch))
+
+    D_ref = stack(1:batch) do b
+        (w_scale[b] * x_scale[b]) *
+            (transpose(Float32.(w_data[:, :, b])) * Float32.(x_data[:, :, b]))
+    end
+
+    W = BlockscaledArray{Float32}(CuArray(w_scale), CuArray(w_data), (:, :, 1))
+    X = BlockscaledArray{Float32}(CuArray(x_scale), CuArray(x_data), (:, :, 1))
+    D = CUDA.zeros(Float32, M, N, batch)
+
+    @test cuBLASLt.matmul_supported(D, batched_transpose(W), X)
+    cuBLASLt.matmul!(D, batched_transpose(W), X)
+
+    @test isapprox(Array(D), D_ref; rtol = 1e-3, atol = 1e-3)
+end
+
+else
+@info "skipping per-batch scalar FP8 matmul testset (10.0 ≤ CC < 12.0 and cuBLASLt ≥ 13.1 claimed)"
+end
 
 @testset "cuBLASLt — unswizzled block scales are rejected" begin
     Scale   = Float8_E8M0FNU
@@ -337,4 +432,50 @@ end # Hopper only (sm_90)
     @test_throws ArgumentError cuBLASLt.scale_mode(W_raw)
     C = CUDA.zeros(Float32, M, N)
     @test_throws ArgumentError cuBLASLt.matmul!(C, transpose(W_raw), X_raw)
+end
+
+@testset "cuBLASLt — scale mode mapping" begin
+    Scale   = Float8_E8M0FNU
+    Element = Float8_E4M3FN
+    M, K, batch = 64, 128, 4
+
+    data(dims...) = CuArray(Element.(randn(dims...)))
+
+    # one Float32 scale per outer element (channelwise/rowwise)
+    W = BlockscaledArray{Float32}(CUDA.rand(Float32, 1, M), data(K, M), (:, 1))
+    @test cuBLASLt.scale_mode(W) == :outer_vec_f32
+
+    # one Float32 scalar per batch entry
+    Wb = BlockscaledArray{Float32}(CUDA.rand(Float32, 1, 1, batch),
+                                   data(K, M, batch), (:, :, 1))
+    @test cuBLASLt.scale_mode(Wb) == :per_batch_scalar_f32
+
+    # a tensorwide scalar spans the batch dimension too
+    Wt = BlockscaledArray{Float32}(CUDA.rand(Float32, 1, 1, 1),
+                                   data(K, M, batch), (:, :, :))
+    @test cuBLASLt.scale_mode(Wt) == :scalar_f32
+
+    # batched per-matrix modes must repeat their scales per batch entry
+    W_shared = BlockscaledArray{Float32}(CuArray(Scale.(rand(K ÷ 32, M, 1))),
+                                         data(K, M, batch), (32, 1, :))
+    @test_throws ArgumentError cuBLASLt.scale_mode(W_shared)
+
+    # a scalar blocking the batch by anything but 1 or : is meaningless
+    W_pair = BlockscaledArray{Float32}(CUDA.rand(Float32, 1, 1, batch ÷ 2),
+                                       data(K, M, batch), (:, :, 2))
+    @test_throws ArgumentError cuBLASLt.scale_mode(W_pair)
+
+    # outer-vec scales must be Float32
+    W_bad = BlockscaledArray{Float32}(CuArray(Scale.(rand(1, M))), data(K, M), (:, 1))
+    @test_throws ArgumentError cuBLASLt.scale_mode(W_bad)
+
+    # scale types with no cuBLASLt mode are refused, not MethodError'd
+    W_e5 = BlockscaledArray{Float32}(CuArray(Float8_E5M2.(rand(K ÷ 32, M))),
+                                     data(K, M), (32, 1))
+    @test_throws ArgumentError cuBLASLt.scale_mode(W_e5)
+
+    # cuBLASLt matmul has no layout for 4D and beyond
+    W4 = BlockscaledArray{Float32}(CUDA.rand(Float32, 1, M, 2, 2),
+                                   data(K, M, 2, 2), (:, 1, 1, 1))
+    @test_throws ArgumentError cuBLASLt.scale_mode(W4)
 end
