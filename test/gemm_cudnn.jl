@@ -5,15 +5,18 @@ using cuDNN: Graph, tensor, tensor!, matmul!, execute!, is_supported,
 @assert !isnothing(Base.get_extension(Microscaling, :cuDNNExt))
 
 # The Microscaling cuDNN extension is hooks-only: `tensor!(g, ::BlockscaledArray)`
-# adds a block-scaled operand (data + swizzled scale tensors + dequantize node)
-# to a graph, and bindings accept the BlockscaledArray itself. This helper is
-# the canonical dequantize→matmul graph built from those hooks.
-lift3(t) = length(t) == 2 ? (t..., 1) : t
+# adds a block-scaled operand (element + swizzled scale tensors + dequantize node)
+# to a graph at the array's own rank, and bindings take the storage components —
+# `elements(A)` for the element tensor, `scales(A)` for the scale tensor. Nothing lifts ranks:
+# cuDNN matmul operands carry an explicit batch dimension, so gemm operands are
+# built 3-D. This helper is the canonical dequantize→matmul graph from those
+# hooks.
+batch1(a) = reshape(a, size(a)..., 1)   # append an explicit batch-1 axis
 
 function blockscaled_matmul_graph(W, X, Dtype)
-    K, M, batch = lift3(size(W.p))
-    N = size(X.p, 2)
-    Wt = PermutedDimsArray(W, ndims(W) == 2 ? (2, 1) : (2, 1, 3))
+    K, M, batch = size(elements(W))
+    N = size(elements(X), 2)
+    Wt = PermutedDimsArray(W, (2, 1, 3))
     g = Graph(io_dtype=Dtype, intermediate_dtype=Float32, compute_dtype=Float32)
     a = tensor!(g, Wt; name="A")
     b = tensor!(g, X; name="B")
@@ -22,10 +25,11 @@ function blockscaled_matmul_graph(W, X, Dtype)
     return g
 end
 
+# C may be 2-D: binding compares memory layouts with singleton dims dropped
 function blockscaled_matmul!(C, g, W, X)
-    execute!(g, tensor(g, "A.data") => W, tensor(g, "A.scale") => W,
-                tensor(g, "B.data") => X, tensor(g, "B.scale") => X,
-                tensor(g, "C") => reshape(C, lift3(size(C))))
+    execute!(g, tensor(g, "A.element") => elements(W), tensor(g, "A.scale") => scales(W),
+                tensor(g, "B.element") => elements(X), tensor(g, "B.scale") => scales(X),
+                tensor(g, "C") => C)
     return C
 end
 
@@ -49,15 +53,15 @@ cudnn_blockscale_claimed = CC >= v"10.0" && cuDNN.functional()
     )
         K_s = K ÷ block
 
-        w_data  = Element.(randn(K, M))
-        x_data  = Element.(randn(K, N))
+        w_element  = Element.(randn(K, M))
+        x_element  = Element.(randn(K, N))
         w_scale = Scale.(rand(K_s, M))
         x_scale = Scale.(rand(K_s, N))
 
-        C_ref = blockscaled_gemm_reference(w_data, w_scale, x_data, x_scale, block)
+        C_ref = blockscaled_gemm_reference(w_element, w_scale, x_element, x_scale, block)
 
-        W = BlockscaledArray(sm1xx(CuArray(w_scale)), CuArray(w_data))
-        X = BlockscaledArray(sm1xx(CuArray(x_scale)), CuArray(x_data))
+        W = BlockscaledArray(sm1xx(CuArray(batch1(w_scale))), CuArray(batch1(w_element)))
+        X = BlockscaledArray(sm1xx(CuArray(batch1(x_scale))), CuArray(batch1(x_element)))
         C = CUDA.zeros(Float32, M, N)
 
         g = blockscaled_matmul_graph(W, X, Float32)
@@ -78,15 +82,15 @@ end
     M, N, K = 256, 256, 256
     K_s = K ÷ block
 
-    w_data  = Element.(randn(K, M))
-    x_data  = Element.(randn(K, N))
+    w_element  = Element.(randn(K, M))
+    x_element  = Element.(randn(K, N))
     w_scale = Scale.(rand(K_s, M) / √K)
     x_scale = Scale.(rand(K_s, N) / √K)
 
-    C_ref = blockscaled_gemm_reference(w_data, w_scale, x_data, x_scale, block)
+    C_ref = blockscaled_gemm_reference(w_element, w_scale, x_element, x_scale, block)
 
-    W = BlockscaledArray(sm1xx(CuArray(w_scale)), CuArray(w_data))
-    X = BlockscaledArray(sm1xx(CuArray(x_scale)), CuArray(x_data))
+    W = BlockscaledArray(sm1xx(CuArray(batch1(w_scale))), CuArray(batch1(w_element)))
+    X = BlockscaledArray(sm1xx(CuArray(batch1(x_scale))), CuArray(batch1(x_element)))
 
     @testset "Dtype=$Dtype" for Dtype in (Float32, Float16, BFloat16)
         C = CUDA.zeros(Dtype, M, N)
@@ -109,15 +113,17 @@ end
     M, N, K = 256, 256, 256
     K_s = K ÷ block
 
-    w_data  = Element.(randn(K, M))
-    x_data  = Element.(randn(K, N))
+    w_element  = Element.(randn(K, M))
+    x_element  = Element.(randn(K, N))
     w_scale = Scale.(rand(K_s, M))
     x_scale = Scale.(rand(K_s, N))
 
-    C_ref = blockscaled_gemm_reference(w_data, w_scale, x_data, x_scale, block)
+    C_ref = blockscaled_gemm_reference(w_element, w_scale, x_element, x_scale, block)
 
-    W = BlockscaledArray(sm1xx(CuArray(w_scale)), NarrowArray{Element}(CuArray(w_data)))
-    X = BlockscaledArray(sm1xx(CuArray(x_scale)), NarrowArray{Element}(CuArray(x_data)))
+    W = BlockscaledArray(sm1xx(CuArray(batch1(w_scale))),
+                         NarrowArray{Element}(CuArray(batch1(w_element))))
+    X = BlockscaledArray(sm1xx(CuArray(batch1(x_scale))),
+                         NarrowArray{Element}(CuArray(batch1(x_element))))
     C = CUDA.zeros(Float32, M, N)
 
     g = blockscaled_matmul_graph(W, X, Float32)
@@ -139,19 +145,19 @@ end
     batch = 4
     K_s = K ÷ block
 
-    w_data  = Element.(randn(K, M, batch))
-    x_data  = Element.(randn(K, N, batch))
+    w_element  = Element.(randn(K, M, batch))
+    x_element  = Element.(randn(K, N, batch))
     w_scale = Scale.(rand(K_s, M, batch))
     x_scale = Scale.(rand(K_s, N, batch))
 
     D_ref = stack(1:batch) do b
         blockscaled_gemm_reference(
-            w_data[:,:,b], w_scale[:,:,b],
-            x_data[:,:,b], x_scale[:,:,b], block)
+            w_element[:,:,b], w_scale[:,:,b],
+            x_element[:,:,b], x_scale[:,:,b], block)
     end
 
-    W = BlockscaledArray(sm1xx(CuArray(w_scale)), CuArray(w_data))
-    X = BlockscaledArray(sm1xx(CuArray(x_scale)), CuArray(x_data))
+    W = BlockscaledArray(sm1xx(CuArray(w_scale)), CuArray(w_element))
+    X = BlockscaledArray(sm1xx(CuArray(x_scale)), CuArray(x_element))
     D = CUDA.zeros(Float32, M, N, batch)
 
     g = blockscaled_matmul_graph(W, X, Float32)
@@ -177,22 +183,22 @@ end
     batch = 4
     K_s = K ÷ block
 
-    w_data  = Element.(randn(K, M))
-    x_data  = Element.(randn(K, N, batch))
+    w_element  = Element.(randn(K, M))
+    x_element  = Element.(randn(K, N, batch))
     w_scale = Scale.(rand(K_s, M))
     x_scale = Scale.(rand(K_s, N, batch))
 
     D_ref = stack(1:batch) do b
         blockscaled_gemm_reference(
-            w_data, w_scale, x_data[:,:,b], x_scale[:,:,b], block)
+            w_element, w_scale, x_element[:,:,b], x_scale[:,:,b], block)
     end
 
-    W = BlockscaledArray(sm1xx(CuArray(w_scale)), CuArray(w_data))
-    X = BlockscaledArray(sm1xx(CuArray(x_scale)), CuArray(x_data))
+    W = BlockscaledArray(sm1xx(CuArray(batch1(w_scale))), CuArray(batch1(w_element)))
+    X = BlockscaledArray(sm1xx(CuArray(x_scale)), CuArray(x_element))
     D = CUDA.zeros(Float32, M, N, batch)
 
     g = Graph(io_dtype=Float32, intermediate_dtype=Float32, compute_dtype=Float32)
-    a = tensor!(g, PermutedDimsArray(W, (2, 1)); name="A")    # (M, K, 1)
+    a = tensor!(g, PermutedDimsArray(W, (2, 1, 3)); name="A") # (M, K, 1)
     b = tensor!(g, X; name="B")                               # (K, N, batch)
     c = tensor!(g; dims=(M, N, batch), dtype=Float32, output=true, name="C")
     matmul!(g, a, b; c)
@@ -224,18 +230,18 @@ end
     M, N, K = 256, 256, 256
     K_s = K ÷ block
 
-    w_data  = Element.(randn(K, M))
-    x_data  = Element.(randn(K, N))
+    w_element  = Element.(randn(K, M))
+    x_element  = Element.(randn(K, N))
     w_scale = Scale.(rand(K_s, M) / √K)
     x_scale = Scale.(rand(K_s, N) / √K)
 
-    C_ref = blockscaled_gemm_reference(w_data, w_scale, x_data, x_scale, block)
+    C_ref = blockscaled_gemm_reference(w_element, w_scale, x_element, x_scale, block)
 
-    W = BlockscaledArray(sm1xx(CuArray(w_scale)), CuArray(w_data))
-    X = BlockscaledArray(sm1xx(CuArray(x_scale)), CuArray(x_data))
+    W = BlockscaledArray(sm1xx(CuArray(batch1(w_scale))), CuArray(batch1(w_element)))
+    X = BlockscaledArray(sm1xx(CuArray(batch1(x_scale))), CuArray(batch1(x_element)))
 
     g = Graph(intermediate_dtype=Float32, compute_dtype=Float32)
-    a = tensor!(g, PermutedDimsArray(W, (2, 1)); name="A")
+    a = tensor!(g, PermutedDimsArray(W, (2, 1, 3)); name="A")
     b = tensor!(g, X; name="B")
     c = matmul!(g, a, b)                       # virtual (M, N, 1) f32
     ty, tscale = block_scale_quantize!(g, c; block_size=block, block_dim=1,
@@ -250,9 +256,9 @@ end
     # measured supported on sm_121 / cuDNN 9.24
     @test is_supported(g) == cudnn_blockscale_claimed
     if cudnn_blockscale_claimed
-        execute!(g, tensor(g, "A.data") => W, tensor(g, "A.scale") => W,
-                    tensor(g, "B.data") => X, tensor(g, "B.scale") => X,
-                    ty => D, tscale => D)
+        execute!(g, tensor(g, "A.element") => elements(W), tensor(g, "A.scale") => scales(W),
+                    tensor(g, "B.element") => elements(X), tensor(g, "B.scale") => scales(X),
+                    ty => elements(D), tscale => scales(D))
         @test isapprox(Float32.(Array(copy(D))), C_ref; rtol = 0.15, atol = 0.15)
     end
 end
@@ -282,15 +288,18 @@ end
     W = BlockscaledArray(sm1xx(CuArray(Scale.(rand(K ÷ 32, M)))),
                          CuArray(Element.(randn(K, M))))
 
+    # tensors are declared at the array's own rank: a 2-D operand stays rank 2
     g = Graph()
     a = tensor!(g, PermutedDimsArray(W, (2, 1)); name="A")
     b = tensor!(g, W; name="B")
-    @test a.dims == [M, K, 1]
-    @test b.dims == [K, M, 1]
+    @test a.dims == [M, K]
+    @test b.dims == [K, M]
 
-    # bindings dispatch on dtype: the same BlockscaledArray backs both tensors
-    @test cuDNN.checked_array_pointer(tensor(g, "A.data"), W) == pointer(W.p)
-    @test cuDNN.checked_array_pointer(tensor(g, "A.scale"), W) == pointer(parent(W.x))
+    # dense element arrays go through cuDNN's own layout-checked binding (the
+    # permuted presentation matches as a memory layout); the swizzled scales
+    # go through the extension's Sm1xxArray method
+    @test cuDNN.binding_pointer(tensor(g, "A.element"), elements(W)) == pointer(elements(W))
+    @test cuDNN.binding_pointer(tensor(g, "A.scale"), scales(W)) == pointer(parent(scales(W)))
 end
 
 @testset "cuDNN — invalid operands are rejected" begin
@@ -317,12 +326,21 @@ end
     @test_throws ArgumentError tensor!(g, W4; name="A")
 
     # mismatched inner dimensions surface from the graph matmul
-    W = BlockscaledArray(sm1xx(CuArray(Scale.(rand(K ÷ 32, M)))),
-                         CuArray(Element.(randn(K, M))))
-    X_mismatch = BlockscaledArray(sm1xx(CuArray(Scale.(rand(2K ÷ 32, M)))),
-                                  CuArray(Element.(randn(2K, M))))
+    W = BlockscaledArray(sm1xx(CuArray(batch1(Scale.(rand(K ÷ 32, M))))),
+                         CuArray(batch1(Element.(randn(K, M)))))
+    X_mismatch = BlockscaledArray(sm1xx(CuArray(batch1(Scale.(rand(2K ÷ 32, M))))),
+                                  CuArray(batch1(Element.(randn(2K, M)))))
     g2 = Graph()
-    a = tensor!(g2, PermutedDimsArray(W, (2, 1)); name="A")
+    a = tensor!(g2, PermutedDimsArray(W, (2, 1, 3)); name="A")
     b = tensor!(g2, X_mismatch; name="B")
     @test_throws DimensionMismatch matmul!(g2, a, b)
+
+    # 2-D operands declare rank-2 tensors, which cuDNN matmul rejects — the
+    # batch axis is the caller's to add
+    W2 = BlockscaledArray(sm1xx(CuArray(Scale.(rand(K ÷ 32, M)))),
+                          CuArray(Element.(randn(K, M))))
+    g3 = Graph()
+    a2 = tensor!(g3, PermutedDimsArray(W2, (2, 1)); name="A")
+    b2 = tensor!(g3, W2; name="B")
+    @test_throws ArgumentError matmul!(g3, a2, b2)
 end

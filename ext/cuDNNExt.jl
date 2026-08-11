@@ -4,7 +4,7 @@ using Microscaling:
     Sm1xxArray,
     Float8_E4M3FN, Float8_E5M2, Float8_E8M0FNU, Float4_E2M1FN,
     BlockscaledArray,
-    block_size, scale_type, element_type
+    block_size, scale_type, element_type, elements, scales
 
 using BitPacking: NarrowArray
 
@@ -46,16 +46,10 @@ function mx_block_size(A::BlockscaledArray{<:Any,N}) where {N}
         "no cuDNN block-scale mode for $S scales with $(blockstr(blk)) blocks"))
 end
 
-lift3(t::NTuple{2,Int}) = (t..., 1)
 # dense storage strides of the underlying (unpermuted) array, then present
-# both dims and strides through `perm`, lifted to cuDNN matmul's rank 3
-function present(dims::NTuple{2,Int}, perm)
-    strides = (1, dims[1])
-    return (dims[perm[1]], dims[perm[2]], 1),
-           (strides[perm[1]], strides[perm[2]], dims[1] * dims[2])
-end
-function present(dims::NTuple{3,Int}, perm)
-    strides = (1, dims[1], dims[1] * dims[2])
+# both dims and strides through `perm`
+function present(dims::NTuple{N,Int}, perm) where {N}
+    strides = cumprod((1, Base.front(dims)...))
     return map(i -> dims[i], perm), map(i -> strides[i], perm)
 end
 
@@ -63,18 +57,22 @@ end
     tensor!(g::Graph, A::BlockscaledArray; name)
     tensor!(g::Graph, PermutedDimsArray(A, perm); name)
 
-Add a block-scaled operand to a cuDNN graph: a data tensor `"\$name.data"`, a
+Add a block-scaled operand to a cuDNN graph: an element tensor `"\$name.element"`, a
 scale tensor `"\$name.scale"` in the swizzled 128×4 tile layout, and a
 block-scale-dequantize node joining them. Returns the virtual dequantized
 tensor.
 
-The bare array is presented in storage order; wrapping it in a
-`PermutedDimsArray` presents the same bytes with permuted dimensions. Blockscaled
-gemm operands store K in dimension 1, so the `a` operand of `matmul!` — which
-wants M first — is passed as `PermutedDimsArray(A, (2, 1))` (or `(2, 1, 3)`
-when batched).
+Tensors are declared at the array's own rank; nothing is lifted. cuDNN's
+matmul takes rank-3 `(rows, cols, batch)` operands, so gemm operands are 3-D
+BlockscaledArrays with K in dimension 1 (batch extent 1 for a plain gemm),
+and the `a` operand of `matmul!` — which wants M first — is passed as
+`PermutedDimsArray(A, (2, 1, 3))`.
 
-Bind the `BlockscaledArray` itself to both created tensors on `execute!`.
+The bare array is presented in storage order; wrapping it in a
+`PermutedDimsArray` presents the same bytes with permuted dimensions.
+
+On `execute!`, bind the storage components: `elements(A)` to the element
+tensor and `scales(A)` to the scale tensor.
 """
 cuDNN.tensor!(g::Graph, A::BlockscaledArray{<:Any,N}; name::String="") where {N} =
     block_scale_tensors!(g, A, ntuple(identity, N); name)
@@ -87,43 +85,31 @@ cuDNN.tensor!(g::Graph,
 function block_scale_tensors!(g::Graph, A::BlockscaledArray{<:Any,N},
                               perm::NTuple{N,Int}; name::String) where {N}
     bs = mx_block_size(A)
-    A.x isa Sm1xxArray || throw(ArgumentError(
+    scales(A) isa Sm1xxArray || throw(ArgumentError(
         "cuDNN accesses block scales through a swizzled tiled layout, " *
-        "but the scales are a $(nameof(typeof(A.x))); wrap them with `sm1xx`"))
-    ddims, dstrides = present(size(A.p), perm)
-    sdims, sstrides = present(size(A.x), perm)
-    data = cuDNN.tensor!(g; dims=ddims, strides=dstrides, dtype=element_type(A),
-                         name=name * ".data")
+        "but the scales are a $(nameof(typeof(scales(A)))); wrap them with `sm1xx`"))
+    edims, estrides = present(size(elements(A)), perm)
+    sdims, sstrides = present(size(scales(A)), perm)
+    element = cuDNN.tensor!(g; dims=edims, strides=estrides, dtype=element_type(A),
+                            name=name * ".element")
     scale = cuDNN.tensor!(g; dims=sdims, strides=sstrides, dtype=scale_type(A),
                           name=name * ".scale",
                           reordering=CUDNN_TENSOR_REORDERING_F8_128x4)
-    return cuDNN.block_scale_dequantize!(g, data, scale; block_size=bs, name)
+    return cuDNN.block_scale_dequantize!(g, element, scale; block_size=bs, name)
 end
 
-# Tensors created by `tensor!(g, ::BlockscaledArray)` present lifted or
-# permuted dims over packed (NarrowArray) or swizzled (Sm1xxArray) storage,
-# so the dense checks cannot apply; the layout was validated when the graph was
-# built. The element and scale types of a block-scale mode always differ, so
-# the tensor's dtype picks which buffer backs it.
-function cuDNN.checked_array_pointer(t::Tensor, A::BlockscaledArray)
-    if t.dtype == cuDNN.graph_dtype(element_type(A))
-        buffer, n = A.p, length(A.p)
-    elseif t.dtype == cuDNN.graph_dtype(scale_type(A))
-        buffer, n = A.x, length(A.x)
-    else
-        throw(ArgumentError(
-            "binding for $(t.name): tensor data type matches neither the element " *
-            "nor the scale type of the BlockscaledArray"))
-    end
-    n == prod(t.dims) || throw(DimensionMismatch(
-        "binding for $(t.name) has $n elements, expected $(prod(t.dims))"))
-    return device_pointer(buffer)
+# Packed and swizzled storage cannot satisfy the dense layout comparison —
+# NarrowArray elements are sub-byte, and an Sm1xxArray's logical presentation
+# is not strided (the F8_128x4 reordering carries the real layout) — so
+# binding checks element type and count and hands over the parent's pointer.
+function cuDNN.binding_pointer(t::Tensor, a::Union{Sm1xxArray,NarrowArray})
+    parent(a) isa cuDNN.DenseCuArray || throw(ArgumentError(
+        "binding for $(t.name) needs GPU-backed storage, got $(typeof(parent(a)))"))
+    cuDNN.graph_dtype(eltype(a)) == t.dtype || throw(ArgumentError(
+        "binding for $(t.name) has eltype $(eltype(a)), expected $(t.dtype)"))
+    length(a) == prod(t.dims) || throw(DimensionMismatch(
+        "binding for $(t.name) has $(length(a)) elements, expected $(prod(t.dims))"))
+    return pointer(parent(a))
 end
-
-device_pointer(a::cuDNN.DenseCuArray) = pointer(a)
-device_pointer(a::NarrowArray) = device_pointer(parent(a))
-device_pointer(a::Sm1xxArray) = device_pointer(parent(a))
-device_pointer(a) = throw(ArgumentError(
-    "block-scaled cuDNN bindings need GPU-backed storage, got $(typeof(a))"))
 
 end
