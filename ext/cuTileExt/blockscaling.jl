@@ -1,46 +1,53 @@
 using Microscaling
-import Microscaling: block_size
+import Microscaling: block_size, elements, scales
 
 import cuTile as ct
 import Adapt
 
-struct BlockscaledTileArray{T,N,K,X,P} <: ct.AbstractTileArray{T,N}
-    x::X
-    p::P
+struct BlockscaledTileArray{T,N,K,S,E} <: ct.AbstractTileArray{T,N}
+    scale::S
+    element::E
 end
 
 function Adapt.adapt_structure(
     to::ct.KernelAdaptor, arr::BlockscaledArray{T,N,K}
 ) where {T,N,K}
     any(s -> s isa Colon, block_size(arr)) && throw(ArgumentError("Colon block size is not supported."))
-    x = Adapt.adapt(to, arr.x)
-    p = Adapt.adapt(to, arr.p)
-    return BlockscaledTileArray{T,N,K,typeof(x),typeof(p)}(x, p)
+    scale = Adapt.adapt(to, scales(arr))
+    element = Adapt.adapt(to, elements(arr))
+    return BlockscaledTileArray{T,N,K,typeof(scale),typeof(element)}(scale, element)
 end
 
-Base.size(arr::BlockscaledTileArray, args...) = size(arr.p, args...)
+elements(arr::BlockscaledTileArray) = arr.element
+scales(arr::BlockscaledTileArray) = arr.scale
+
+Base.size(arr::BlockscaledTileArray, args...) = size(elements(arr), args...)
 
 block_size(::BlockscaledTileArray{T,N,K}) where {T,N,K} = Tuple(K.parameters)
 block_size(arr::BlockscaledTileArray, i::Integer) = block_size(arr)[i]
 
 Base.transpose(arr::BlockscaledTileArray{<:Any,2}) = PermutedTileArray(arr, (2,1))
 
-struct BlockscaledTile{T,X<:ct.Tile,P<:ct.Tile}
-    x::X
-    p::P
+struct BlockscaledTile{T,S<:ct.Tile,E<:ct.Tile}
+    scale::S
+    element::E
 end
 
-BlockscaledTile{T}(x, p) where T = BlockscaledTile{T,typeof(x),typeof(p)}(x, p)
+BlockscaledTile{T}(scale, element) where T =
+    BlockscaledTile{T,typeof(scale),typeof(element)}(scale, element)
 
-Base.size(tile::BlockscaledTile) = size(tile.p)
-Base.size(tile::BlockscaledTile, i::Integer) = size(tile.p, i)
-Base.ndims(tile::BlockscaledTile) = ndims(tile.p)
+elements(tile::BlockscaledTile) = tile.element
+scales(tile::BlockscaledTile) = tile.scale
+
+Base.size(tile::BlockscaledTile) = size(elements(tile))
+Base.size(tile::BlockscaledTile, i::Integer) = size(elements(tile), i)
+Base.ndims(tile::BlockscaledTile) = ndims(elements(tile))
 Base.eltype(::BlockscaledTile{T}) where T = T
 
 function Base.convert(::Type{ct.Tile{T}}, tile::BlockscaledTile{T}) where T
-    p, x = tile.p, tile.x
-    inner = ntuple(i -> size(p, i) ÷ size(x, i), Val(ndims(p)))
-    return T.(p) .* T.(repeat(x; inner))
+    element, scale = elements(tile), scales(tile)
+    inner = ntuple(i -> size(element, i) ÷ size(scale, i), Val(ndims(element)))
+    return T.(element) .* T.(repeat(scale; inner))
 end
 
 Base.convert(::Type{ct.Tile}, tile::BlockscaledTile{T}) where T = convert(ct.Tile{T}, tile)
@@ -54,9 +61,9 @@ function ct.load(
         k = block_size(arr, i)
         isone(k) ? shape[i] : shape[i] ÷ k
     end
-    x = ct.load(arr.x, index, scale_shape; scale_args..., kws...)
-    p = ct.load(arr.p, index, shape; element_args..., kws...)
-    return BlockscaledTile{eltype(arr)}(x, p)
+    scale = ct.load(scales(arr), index, scale_shape; scale_args..., kws...)
+    element = ct.load(elements(arr), index, shape; element_args..., kws...)
+    return BlockscaledTile{eltype(arr)}(scale, element)
 end
 
 function Base.muladd(
@@ -65,8 +72,8 @@ function Base.muladd(
     acc::ct.Tile{T}
 ) where T
     return ct.muladd_scaled(
-        a.p, a.x,
-        b.p, b.x,
+        elements(a), scales(a),
+        elements(b), scales(b),
         acc
     )
 end
@@ -76,16 +83,16 @@ Broadcast.broadcastable(tile::BlockscaledTile) = convert(ct.Tile, tile)
 # `reshape` is excluded because a split can cross a block boundary
 # (it needs intent the raw target shape doesn't carry).
 Base.transpose(tile::BlockscaledTile{T}) where T =
-    BlockscaledTile{T}(transpose(tile.x), transpose(tile.p))
+    BlockscaledTile{T}(transpose(scales(tile)), transpose(elements(tile)))
 
 Base.permutedims(tile::BlockscaledTile{T}, perm) where T =
-    BlockscaledTile{T}(permutedims(tile.x, perm), permutedims(tile.p, perm))
+    BlockscaledTile{T}(permutedims(scales(tile), perm), permutedims(elements(tile), perm))
 
 Base.repeat(tile::BlockscaledTile{T}, counts::Integer...) where T =
-    BlockscaledTile{T}(repeat(tile.x, counts...), repeat(tile.p, counts...))
+    BlockscaledTile{T}(repeat(scales(tile), counts...), repeat(elements(tile), counts...))
 
 Base.repeat(tile::BlockscaledTile{T}; inner = nothing, outer = nothing) where T =
-    BlockscaledTile{T}(repeat(tile.x; inner, outer), repeat(tile.p; inner, outer))
+    BlockscaledTile{T}(repeat(scales(tile); inner, outer), repeat(elements(tile); inner, outer))
 
 for op in (:+, :-)
     @eval begin

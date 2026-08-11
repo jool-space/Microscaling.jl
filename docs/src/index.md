@@ -20,6 +20,8 @@ Pkg.add("Microscaling")
 BlockscaledArray
 BlockscaledVector
 BlockscaledMatrix
+scales
+elements
 block_size
 scale_type
 element_type

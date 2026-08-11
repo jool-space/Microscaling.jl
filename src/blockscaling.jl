@@ -2,36 +2,37 @@ using Adapt
 using Rewrap: Unsqueeze, Keep, Split, Merge
 
 """
-    BlockscaledArray{T}(x, p, block_size = size(p) .÷ size(x))
-    BlockscaledArray(x, p, args...)
+    BlockscaledArray{T}(scale, element, block_size = size(element) .÷ size(scale))
+    BlockscaledArray(scale, element, args...)
 
-An `AbstractArray{T,N}` pairing an element array `p` with a scale array `x`,
+An `AbstractArray{T,N}` pairing an `element` array with a `scale` array,
 where each scale applies to one block of elements. Indexing returns
 `T(element) * T(scale)`.
 
 `block_size` gives the block extent along each dimension: an `Int` `k` means
 `k` consecutive elements share a scale, and `:` means the whole dimension
-shares a scale. Without `T`, the element type is promoted from `eltype(x)`
-and `eltype(p)` (`Float32` if the promotion is abstract).
+shares a scale. Without `T`, the element type is promoted from
+`eltype(scale)` and `eltype(element)` (`Float32` if the promotion is
+abstract).
 """
 struct BlockscaledArray{
     T<:Number, N, K<:NTuple{N,Any},
-    X<:AbstractArray{<:Number,N}, P<:AbstractArray{<:Number,N},
+    S<:AbstractArray{<:Number,N}, E<:AbstractArray{<:Number,N},
 } <: AbstractArray{T,N}
-    x::X
-    p::P
+    scale::S
+    element::E
 end
 
-function BlockscaledArray{T,N,K}(x::X, p::P) where {
+function BlockscaledArray{T,N,K}(scale::S, element::E) where {
     T<:Number, N, K<:NTuple{N,Any},
-    X<:AbstractArray{<:Number,N}, P<:AbstractArray{<:Number,N}
+    S<:AbstractArray{<:Number,N}, E<:AbstractArray{<:Number,N}
 }
-    validate_block_size(Tuple(K.parameters), size(x), size(p))
-    return BlockscaledArray{T,N,K,X,P}(x, p)
+    validate_block_size(Tuple(K.parameters), size(scale), size(element))
+    return BlockscaledArray{T,N,K,S,E}(scale, element)
 end
 
-function validate_block_size(block_size, x_size, p_size)
-    for (i, (k, xs, ps)) in enumerate(zip(block_size, x_size, p_size))
+function validate_block_size(block_size, scale_size, element_size)
+    for (i, (k, xs, ps)) in enumerate(zip(block_size, scale_size, element_size))
         if k === 1
             xs == ps || throw(DimensionMismatch(
                 "Expected number of scale values ($xs) and element values ($ps) to match along dimension $i, for block size of $k."))
@@ -47,24 +48,38 @@ function validate_block_size(block_size, x_size, p_size)
 end
 
 function BlockscaledArray{T}(
-    x::AbstractArray{<:Number,N},
-    p::AbstractArray{<:Number,N},
-    block_size::NTuple{N,Union{Int,Colon}} = size(p) .÷ size(x)
+    scale::AbstractArray{<:Number,N},
+    element::AbstractArray{<:Number,N},
+    block_size::NTuple{N,Union{Int,Colon}} = size(element) .÷ size(scale)
 ) where {T,N}
     K = Tuple{block_size...}
-    return BlockscaledArray{T,N,K}(x, p)
+    return BlockscaledArray{T,N,K}(scale, element)
 end
 
-function promote_eltype(x::AbstractArray, p::AbstractArray)
-    T = promote_type(eltype(x), eltype(p))
+function promote_eltype(scale::AbstractArray, element::AbstractArray)
+    T = promote_type(eltype(scale), eltype(element))
     isabstracttype(T) ? Float32 : T
 end
 
-function BlockscaledArray(x::AbstractArray, p::AbstractArray, args...; kws...)
-    return BlockscaledArray{promote_eltype(x, p)}(x, p, args...; kws...)
+function BlockscaledArray(scale::AbstractArray, element::AbstractArray, args...; kws...)
+    return BlockscaledArray{promote_eltype(scale, element)}(scale, element, args...; kws...)
 end
 
-Base.size(arr::BlockscaledArray, args...) = size(arr.p, args...)
+"""
+    elements(arr::BlockscaledArray)
+
+The element array, in which each element belongs to a block sharing one scale.
+"""
+elements(arr::BlockscaledArray) = arr.element
+
+"""
+    scales(arr::BlockscaledArray)
+
+The scale array, holding one scale per block of elements.
+"""
+scales(arr::BlockscaledArray) = arr.scale
+
+Base.size(arr::BlockscaledArray, args...) = size(elements(arr), args...)
 
 """
     block_size(arr::BlockscaledArray[, i])
@@ -80,23 +95,23 @@ block_size(arr::BlockscaledArray, i::Integer) = block_size(arr)[i]
 
 The element type of the scale array.
 """
-scale_type(arr::BlockscaledArray) = eltype(arr.x)
+scale_type(arr::BlockscaledArray) = eltype(scales(arr))
 
 """
     element_type(arr::BlockscaledArray)
 
 The element type of the element array.
 """
-element_type(arr::BlockscaledArray) = eltype(arr.p)
+element_type(arr::BlockscaledArray) = eltype(elements(arr))
 
 Base.IndexStyle(::Type{<:BlockscaledArray}) = IndexCartesian()
 
 function Adapt.adapt_structure(
     to, arr::BlockscaledArray{T,N,K}
 ) where {T,N,K}
-    x = adapt(to, arr.x)
-    p = adapt(to, arr.p)
-    return BlockscaledArray{T,N,K}(x, p)
+    scale = adapt(to, scales(arr))
+    element = adapt(to, elements(arr))
+    return BlockscaledArray{T,N,K}(scale, element)
 end
 
 # Allocate plain (dense) output in the SAME storage as the element data, so
@@ -104,7 +119,7 @@ end
 # rather than Base's default CPU `Array`. Reductions/maps rely on this for the
 # destination buffer.
 Base.similar(arr::BlockscaledArray, ::Type{T}, dims::Dims) where {T} =
-    similar(arr.p, T, dims)
+    similar(elements(arr), T, dims)
 
 function Base.getindex(arr::BlockscaledArray{T,N}, i::Vararg{Int,N}) where {T,N}
     @boundscheck checkbounds(arr, i...)
@@ -119,8 +134,8 @@ function Base.getindex(arr::BlockscaledArray{T,N}, i::Vararg{Int,N}) where {T,N}
             fld1(i[j], k)
         end
     end
-    element = arr.p[iₚ...]
-    scale = arr.x[iₓ...]
+    element = elements(arr)[iₚ...]
+    scale = scales(arr)[iₓ...]
     value = T(element) * T(scale)
     return value
 end
@@ -140,14 +155,14 @@ Alias for [`BlockscaledArray`](@ref)`{T,2}`.
 const BlockscaledMatrix{T} = BlockscaledArray{T,2}
 
 function Base.copy(arr::BlockscaledArray{T,N}) where {T,N}
-    x_singleton = reshape(T.(arr.x), ntuple(i -> isodd(i) ? Unsqueeze() : Keep(), Val(2N)))
-    p_shape = ntuple(Val(N)) do i
+    scale_singleton = reshape(T.(scales(arr)), ntuple(i -> isodd(i) ? Unsqueeze() : Keep(), Val(2N)))
+    element_shape = ntuple(Val(N)) do i
         k = block_size(arr, i)
         k = k isa Colon ? size(arr, i) : k
         Split(1, (k, :))
     end
-    p_block = reshape(T.(arr.p), p_shape)
-    v = x_singleton .* p_block
+    element_block = reshape(T.(elements(arr)), element_shape)
+    v = scale_singleton .* element_block
     return reshape(v, ntuple(Returns(Merge(2)), Val(N)))
 end
 
