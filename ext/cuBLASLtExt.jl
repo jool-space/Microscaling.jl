@@ -4,20 +4,20 @@ using Microscaling:
     Sm1xxArray,
     Float8_E4M3FN, Float8_E8M0FNU,
     BlockscaledArray,
-    block_size, scale_type
+    block_size, scale_type, elements, scales
 
 import cuBLASLt
 
 cuBLASLt.ltptr(A::Sm1xxArray) = cuBLASLt.ltptr(parent(A))
 
-cuBLASLt.ltdata(A::BlockscaledArray) = A.p
-cuBLASLt.ltscale(A::BlockscaledArray) = A.x
+cuBLASLt.ltdata(A::BlockscaledArray) = elements(A)
+cuBLASLt.ltscale(A::BlockscaledArray) = scales(A)
 
 function cuBLASLt.scale_mode(A::BlockscaledArray{<:Any,N}) where {N}
     2 <= N <= 3 || throw(ArgumentError(
         "cuBLASLt matmul takes matrices or 3-dimensional batches; got $(N)D"))
     mode = _scale_mode(block_size(A), scale_type(A))
-    check_scale_layout(A.x, mode)
+    check_scale_layout(scales(A), mode)
     return mode
 end
 

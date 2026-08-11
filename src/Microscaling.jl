@@ -15,6 +15,7 @@ using Republic
 
 include("blockscaling.jl")
 export BlockscaledArray, BlockscaledVector, BlockscaledMatrix
+public elements, scales
 public block_size, scale_type, element_type
 
 include("sm1xx.jl")

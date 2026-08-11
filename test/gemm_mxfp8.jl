@@ -43,10 +43,10 @@ end
     Z = CUDA.zeros(Float32, M, N)
 
     CUDA.@sync @cuda backend=ct blocks=(cld(M, TM), cld(N, TN)) gemm_mxfp8(
-        X.p,
-        @rearrange(X.x.x, "k1 m2 m1 k0 m0 -> (k1 m2 m1) k0 m0"),
-        Y.p,
-        @rearrange(Y.x.x, "k1 m2 m1 k0 m0 -> (k1 m2 m1) k0 m0"),
+        elements(X),
+        @rearrange(parent(scales(X)), "k1 m2 m1 k0 m0 -> (k1 m2 m1) k0 m0"),
+        elements(Y),
+        @rearrange(parent(scales(Y)), "k1 m2 m1 k0 m0 -> (k1 m2 m1) k0 m0"),
         Z,
         ct.Constant(TM), ct.Constant(TN), ct.Constant(TK),
     )
