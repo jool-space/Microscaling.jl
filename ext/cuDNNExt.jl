@@ -102,7 +102,7 @@ end
 # NarrowArray elements are sub-byte, and an Sm1xxArray's logical presentation
 # is not strided (the F8_128x4 reordering carries the real layout) — so
 # binding checks element type and count and hands over the parent's pointer.
-function cuDNN.binding_pointer(t::Tensor, a::Union{Sm1xxArray,NarrowArray})
+function cuDNN.checked_array_pointer(t::Tensor, a::Union{Sm1xxArray,NarrowArray})
     parent(a) isa cuDNN.DenseCuArray || throw(ArgumentError(
         "binding for $(t.name) needs GPU-backed storage, got $(typeof(parent(a)))"))
     cuDNN.graph_dtype(eltype(a)) == t.dtype || throw(ArgumentError(

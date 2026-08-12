@@ -298,8 +298,8 @@ end
     # dense element arrays go through cuDNN's own layout-checked binding (the
     # permuted presentation matches as a memory layout); the swizzled scales
     # go through the extension's Sm1xxArray method
-    @test cuDNN.binding_pointer(tensor(g, "A.element"), elements(W)) == pointer(elements(W))
-    @test cuDNN.binding_pointer(tensor(g, "A.scale"), scales(W)) == pointer(parent(scales(W)))
+    @test cuDNN.checked_array_pointer(tensor(g, "A.element"), elements(W)) == pointer(elements(W))
+    @test cuDNN.checked_array_pointer(tensor(g, "A.scale"), scales(W)) == pointer(parent(scales(W)))
 end
 
 @testset "cuDNN — invalid operands are rejected" begin
