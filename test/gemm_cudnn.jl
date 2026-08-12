@@ -13,6 +13,10 @@ using cuDNN: Graph, tensor, tensor!, matmul!, execute!, is_supported,
 # hooks.
 batch1(a) = reshape(a, size(a)..., 1)   # append an explicit batch-1 axis
 
+# FP4 elements are sub-byte and live bit-packed on the GPU
+gpu_elements(a) = eltype(a) === Float4_E2M1FN ?
+    NarrowArray{Float4_E2M1FN}(CuArray(a)) : CuArray(a)
+
 function blockscaled_matmul_graph(W, X, Dtype)
     K, M, batch = size(elements(W))
     N = size(elements(X), 2)
@@ -104,34 +108,36 @@ end
     end
 end
 
-@testset "cuDNN NVFP4 — dequantize→matmul graph" begin
+# every (element A × element B, scale, block) combination cuDNN's block-scale
+# matmul recipes accept; MXFP8 e4m3×e4m3 additionally sweeps shapes above
+@testset "cuDNN $label — dequantize→matmul graph" for (label, ElemA, ElemB, Scale, block) in (
+    ("NVFP4",           Float4_E2M1FN, Float4_E2M1FN, Float8_E4M3FN,  16),
+    ("MXFP4",           Float4_E2M1FN, Float4_E2M1FN, Float8_E8M0FNU, 32),
+    ("MXFP8 e4m3×e5m2", Float8_E4M3FN, Float8_E5M2,   Float8_E8M0FNU, 32),
+    ("MXFP8 e5m2×e4m3", Float8_E5M2,   Float8_E4M3FN, Float8_E8M0FNU, 32),
+    ("MXFP8 e5m2×e5m2", Float8_E5M2,   Float8_E5M2,   Float8_E8M0FNU, 32),
+)
     Random.seed!(5)
 
-    Scale   = Float8_E4M3FN
-    Element = Float4_E2M1FN
-    block = 16
     M, N, K = 256, 256, 256
     K_s = K ÷ block
 
-    w_element  = Element.(randn(K, M))
-    x_element  = Element.(randn(K, N))
+    w_element  = ElemA.(randn(K, M))
+    x_element  = ElemB.(randn(K, N))
     w_scale = Scale.(rand(K_s, M))
     x_scale = Scale.(rand(K_s, N))
 
     C_ref = blockscaled_gemm_reference(w_element, w_scale, x_element, x_scale, block)
 
-    W = BlockscaledArray(sm1xx(CuArray(batch1(w_scale))),
-                         NarrowArray{Element}(CuArray(batch1(w_element))))
-    X = BlockscaledArray(sm1xx(CuArray(batch1(x_scale))),
-                         NarrowArray{Element}(CuArray(batch1(x_element))))
+    W = BlockscaledArray(sm1xx(CuArray(batch1(w_scale))), gpu_elements(batch1(w_element)))
+    X = BlockscaledArray(sm1xx(CuArray(batch1(x_scale))), gpu_elements(batch1(x_element)))
     C = CUDA.zeros(Float32, M, N)
 
     g = blockscaled_matmul_graph(W, X, Float32)
-    if is_supported(g)
+    @test is_supported(g) == cudnn_blockscale_claimed
+    if cudnn_blockscale_claimed
         blockscaled_matmul!(C, g, W, X)
         @test isapprox(Array(C), C_ref; rtol = 1e-4, atol = 1e-4)
-    else
-        @test_skip cudnn_blockscale_claimed
     end
 end
 
@@ -300,6 +306,13 @@ end
     # go through the extension's Sm1xxArray method
     @test cuDNN.checked_array_pointer(tensor(g, "A.element"), elements(W)) == pointer(elements(W))
     @test cuDNN.checked_array_pointer(tensor(g, "A.scale"), scales(W)) == pointer(parent(scales(W)))
+
+    # rank is not capped to matmul's 3: block scaling is not just for matmul
+    W4 = BlockscaledArray(sm1xx(CuArray(Scale.(rand(K ÷ 32, M, 2, 3)))),
+                          CuArray(Element.(randn(K, M, 2, 3))))
+    g4 = Graph()
+    c = tensor!(g4, W4; name="C")
+    @test c.dims == [K, M, 2, 3]
 end
 
 @testset "cuDNN — invalid operands are rejected" begin
@@ -320,10 +333,11 @@ end
                                       CuArray(Element.(randn(K, M))), (:, 1))
     @test_throws ArgumentError tensor!(g, W_f32; name="A")
 
-    # cuDNN matmul has no layout for 4D and beyond
-    W4 = BlockscaledArray{Float32}(CUDA.rand(Float32, 1, M, 2, 2),
-                                   CuArray(Element.(randn(K, M, 2, 2))), (:, 1, 1, 1))
-    @test_throws ArgumentError tensor!(g, W4; name="A")
+    # UE8M0 recipes are block-32 only: block-16 e8m0 graphs never get an
+    # engine (verified across output types and shapes), so refuse up front
+    W16 = BlockscaledArray(sm1xx(CuArray(Float8_E8M0FNU.(rand(K ÷ 16, M)))),
+                           NarrowArray{Float4_E2M1FN}(CuArray(Float4_E2M1FN.(randn(K, M)))))
+    @test_throws ArgumentError tensor!(g, W16; name="A")
 
     # mismatched inner dimensions surface from the graph matmul
     W = BlockscaledArray(sm1xx(CuArray(batch1(Scale.(rand(K ÷ 32, M))))),
