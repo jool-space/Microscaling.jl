@@ -14,6 +14,10 @@ Microfloats = "31c70f10-a750-4521-b13c-797315ae2933"
 Republic = "27243419-9dde-4721-b67c-fd63626fea7f"
 Rewrap = "e37f04ce-ca06-4a96-b09f-ea39bec02b08"
 
+[sources]
+BitPacking = {url = "https://github.com/MurrellGroup/BitPacking.jl", rev = "cudnn-ext"}
+Rewrap = {url = "https://github.com/MurrellGroup/Rewrap.jl", rev = "main"}
+
 [weakdeps]
 cuBLASLt = "448fee3d-7d89-4b6e-8554-2e2b5f03afa7"
 cuDNN = "02a925ec-e4fe-4b08-9a7e-0d78e3d38ccd"
@@ -30,7 +34,7 @@ BitPacking = "0.2.4"
 Einops = "0.2.1"
 Microfloats = "0.2.5"
 Republic = "2.2"
-Rewrap = "0.1.8"
+Rewrap = "0.1.9"
 cuBLASLt = "0.1.3"
 cuDNN = "6.2.1"
 cuTile = "0.3.2, 1.0.0"
