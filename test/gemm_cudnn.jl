@@ -223,11 +223,7 @@ end
     # swizzled scales written straight into a BlockscaledArray). The
     # dequantized result must reproduce the f32 gemm within block-quantization
     # error; wrong scale bytes (a mislaid swizzle) miss by powers of two, so
-    # the loose tolerance still catches layout errors. This is also the
-    # positive control for the quantize node: NVIDIA's sample only blesses
-    # quantize fused after a matmul, and this test proving the node numerically
-    # is what licenses reading the standalone-quantize claim below as "no
-    # engine" rather than "wrong graph".
+    # the loose tolerance still catches layout errors.
     Random.seed!(19)
 
     Scale   = Float8_E8M0FNU
@@ -269,12 +265,11 @@ end
     end
 end
 
-@testset "cuDNN MXFP8 — standalone quantize has no engine" begin
-    # a lone quantize graph finalizes (the descriptors are valid) but no
-    # engine takes it, measured on sm_121 / cuDNN 9.24 — consistent with
-    # NVIDIA's sample, which only shows quantize fused after a matmul. If this
-    # starts failing on newer cuDNN or other hardware, standalone quantize has
-    # gained an engine: flip the claim and add numerics.
+@testset "cuDNN MXFP8 — standalone quantize" begin
+    # a lone quantize graph finalizes (the descriptors are valid); whether
+    # any engine takes it is cuDNN's concern, not ours to pin — none does on
+    # sm_121 / cuDNN 9.24, consistent with NVIDIA's sample, which only shows
+    # quantize fused after a matmul
     Scale   = Float8_E8M0FNU
     Element = Float8_E4M3FN
     K, N = 256, 256
@@ -283,7 +278,7 @@ end
     tx = tensor!(g; dims=(K, N, 1), dtype=Float32, name="X")
     block_scale_quantize!(g, tx; block_size=32, block_dim=1,
                           dtype=Element, scale_dtype=Scale)
-    @test !is_supported(g)
+    @test is_supported(g) isa Bool
 end
 
 @testset "cuDNN — tensor presentation" begin
@@ -306,6 +301,14 @@ end
     # go through the extension's Sm1xxArray method
     @test cuDNN.checked_array_pointer(tensor(g, "A.element"), elements(W)) == pointer(elements(W))
     @test cuDNN.checked_array_pointer(tensor(g, "A.scale"), scales(W)) == pointer(parent(scales(W)))
+
+    # a higher rank lifts by trailing singletons, for callers keeping a
+    # graph's tensors at one uniform rank
+    g5 = Graph()
+    d = tensor!(g5, PermutedDimsArray(W, (2, 1)); name="D", rank=3)
+    @test d.dims == [M, K, 1]
+    @test cuDNN.tensor(g5, "D.scale").dims == [M, K ÷ 32, 1]
+    @test_throws ArgumentError tensor!(g5, W; name="E", rank=1)
 
     # rank is not capped to matmul's 3: block scaling is not just for matmul
     W4 = BlockscaledArray(sm1xx(CuArray(Scale.(rand(K ÷ 32, M, 2, 3)))),

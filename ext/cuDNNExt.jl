@@ -51,7 +51,9 @@ end
 # block-scale-dequantize node joining them. Returns the virtual dequantized
 # tensor.
 #
-# Tensors are declared at the array's own rank; nothing is lifted. cuDNN's
+# Tensors are declared at the array's own rank by default; a higher `rank`
+# lifts them by trailing singleton dimensions (free in column-major storage),
+# for callers that keep every tensor of a graph at one uniform rank. cuDNN's
 # matmul takes rank-3 `(rows, cols, batch)` operands, so gemm operands are 3-D
 # BlockscaledArrays with K in dimension 1 (batch extent 1 for a plain gemm),
 # and the `a` operand of `matmul!` — which wants M first — is passed as
@@ -59,22 +61,31 @@ end
 #
 # On `execute!`, bind the storage components: `elements(A)` to the element
 # tensor and `scales(A)` to the scale tensor.
-cuDNN.tensor!(g::Graph, A::BlockscaledArray{<:Any,N}; name::String="") where {N} =
-    block_scale_tensors!(g, A, ntuple(identity, N); name)
+cuDNN.tensor!(g::Graph, A::BlockscaledArray{<:Any,N};
+              name::String="", rank::Integer=N) where {N} =
+    block_scale_tensors!(g, A, ntuple(identity, N); name, rank)
 
 cuDNN.tensor!(g::Graph,
               Ap::PermutedDimsArray{<:Any,N,perm,<:Any,<:BlockscaledArray{<:Any,N}};
-              name::String="") where {N,perm} =
-    block_scale_tensors!(g, parent(Ap), perm; name)
+              name::String="", rank::Integer=N) where {N,perm} =
+    block_scale_tensors!(g, parent(Ap), perm; name, rank)
+
+lift(dims, strides, rank) = (
+    (dims..., ntuple(_ -> 1, rank - length(dims))...),
+    (strides..., ntuple(_ -> max(prod(dims), 1), rank - length(dims))...),
+)
 
 function block_scale_tensors!(g::Graph, A::BlockscaledArray{<:Any,N},
-                              perm::NTuple{N,Int}; name::String) where {N}
+                              perm::NTuple{N,Int}; name::String,
+                              rank::Integer=N) where {N}
+    rank >= N || throw(ArgumentError(
+        "cannot declare a $N-dimensional block-scaled operand at rank $rank"))
     bs = mx_block_size(A)
     scales(A) isa Sm1xxArray || throw(ArgumentError(
         "cuDNN accesses block scales through a swizzled tiled layout, " *
         "but the scales are a $(nameof(typeof(scales(A)))); wrap them with `sm1xx`"))
-    edims, estrides = present(size(elements(A)), perm)
-    sdims, sstrides = present(size(scales(A)), perm)
+    edims, estrides = lift(present(size(elements(A)), perm)..., rank)
+    sdims, sstrides = lift(present(size(scales(A)), perm)..., rank)
     element = cuDNN.tensor!(g; dims=edims, strides=estrides, dtype=element_type(A),
                             name=name * ".element")
     scale = cuDNN.tensor!(g; dims=sdims, strides=sstrides, dtype=scale_type(A),
