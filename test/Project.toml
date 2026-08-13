@@ -30,7 +30,7 @@ CUDATools = {url = "https://github.com/JuliaGPU/CUDA.jl", rev = "main", subdir =
 CUPTI = {url = "https://github.com/JuliaGPU/CUDA.jl", rev = "main", subdir = "lib/cupti"}
 NVML = {url = "https://github.com/JuliaGPU/CUDA.jl", rev = "main", subdir = "lib/nvml"}
 cuBLAS = {url = "https://github.com/JuliaGPU/CUDA.jl", rev = "main", subdir = "lib/cublas"}
-cuDNN = {url = "https://github.com/AntonOresten/CUDA.jl", rev = "cudnn-block-scaling", subdir = "lib/cudnn"}
+cuDNN = {url = "https://github.com/JuliaGPU/CUDA.jl", rev = "main", subdir = "lib/cudnn"}
 cuFFT = {url = "https://github.com/JuliaGPU/CUDA.jl", rev = "main", subdir = "lib/cufft"}
 cuRAND = {url = "https://github.com/JuliaGPU/CUDA.jl", rev = "main", subdir = "lib/curand"}
 cuSOLVER = {url = "https://github.com/JuliaGPU/CUDA.jl", rev = "main", subdir = "lib/cusolver"}
