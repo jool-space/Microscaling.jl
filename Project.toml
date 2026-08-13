@@ -16,7 +16,6 @@ Rewrap = "e37f04ce-ca06-4a96-b09f-ea39bec02b08"
 
 [sources]
 BitPacking = {url = "https://github.com/MurrellGroup/BitPacking.jl", rev = "cudnn-ext"}
-Rewrap = {url = "https://github.com/MurrellGroup/Rewrap.jl", rev = "main"}
 
 [weakdeps]
 cuBLASLt = "448fee3d-7d89-4b6e-8554-2e2b5f03afa7"
