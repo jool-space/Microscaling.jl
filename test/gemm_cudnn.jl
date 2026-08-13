@@ -40,7 +40,7 @@ end
 # cuDNN's block-scale graph ops only have Blackwell engines; the graph builds
 # everywhere, so `is_supported` holds the capability claim on any device — a
 # wrong gate fails loudly instead of silently skipping.
-CC = CUDA.capability(CUDA.device())
+CC = CUDACore.capability(CUDACore.device())
 cudnn_blockscale_claimed = CC >= v"10.0" && cuDNN.functional()
 
 @testset "cuDNN MXFP8 — dequantize→matmul graph" begin
@@ -66,7 +66,7 @@ cudnn_blockscale_claimed = CC >= v"10.0" && cuDNN.functional()
 
         W = BlockscaledArray(sm1xx(CuArray(batch1(w_scale))), CuArray(batch1(w_element)))
         X = BlockscaledArray(sm1xx(CuArray(batch1(x_scale))), CuArray(batch1(x_element)))
-        C = CUDA.zeros(Float32, M, N)
+        C = CUDACore.zeros(Float32, M, N)
 
         g = blockscaled_matmul_graph(W, X, Float32)
         @test is_supported(g) == cudnn_blockscale_claimed
@@ -97,7 +97,7 @@ end
     X = BlockscaledArray(sm1xx(CuArray(batch1(x_scale))), CuArray(batch1(x_element)))
 
     @testset "Dtype=$Dtype" for Dtype in (Float32, Float16, BFloat16)
-        C = CUDA.zeros(Dtype, M, N)
+        C = CUDACore.zeros(Dtype, M, N)
         g = blockscaled_matmul_graph(W, X, Dtype)
         if is_supported(g)
             blockscaled_matmul!(C, g, W, X)
@@ -131,7 +131,7 @@ end
 
     W = BlockscaledArray(sm1xx(CuArray(batch1(w_scale))), gpu_elements(batch1(w_element)))
     X = BlockscaledArray(sm1xx(CuArray(batch1(x_scale))), gpu_elements(batch1(x_element)))
-    C = CUDA.zeros(Float32, M, N)
+    C = CUDACore.zeros(Float32, M, N)
 
     g = blockscaled_matmul_graph(W, X, Float32)
     @test is_supported(g) == cudnn_blockscale_claimed
@@ -164,7 +164,7 @@ end
 
     W = BlockscaledArray(sm1xx(CuArray(w_scale)), CuArray(w_element))
     X = BlockscaledArray(sm1xx(CuArray(x_scale)), CuArray(x_element))
-    D = CUDA.zeros(Float32, M, N, batch)
+    D = CUDACore.zeros(Float32, M, N, batch)
 
     g = blockscaled_matmul_graph(W, X, Float32)
     if is_supported(g)
@@ -201,7 +201,7 @@ end
 
     W = BlockscaledArray(sm1xx(CuArray(batch1(w_scale))), CuArray(batch1(w_element)))
     X = BlockscaledArray(sm1xx(CuArray(x_scale)), CuArray(x_element))
-    D = CUDA.zeros(Float32, M, N, batch)
+    D = CUDACore.zeros(Float32, M, N, batch)
 
     g = Graph(io_dtype=Float32, intermediate_dtype=Float32, compute_dtype=Float32)
     a = tensor!(g, PermutedDimsArray(W, (2, 1, 3)); name="A") # (M, K, 1)
@@ -332,7 +332,7 @@ end
     @test_throws ArgumentError tensor!(g, W_raw; name="A")
 
     # scale types with no cuDNN block-scale mode are refused, not MethodError'd
-    W_f32 = BlockscaledArray{Float32}(CUDA.rand(Float32, 1, M),
+    W_f32 = BlockscaledArray{Float32}(CuArray(rand(Float32, 1, M)),
                                       CuArray(Element.(randn(K, M))), (:, 1))
     @test_throws ArgumentError tensor!(g, W_f32; name="A")
 
