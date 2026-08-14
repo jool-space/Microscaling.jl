@@ -30,8 +30,8 @@ if CC >= v"10.0"  # Blackwell: MXFP8/NVFP4 block-scaled formats
 
         C_ref = blockscaled_gemm_reference(w_data, w_scale, x_data, x_scale, block)
 
-        W = BlockscaledArray(sm1xx(CuArray(w_scale)), CuArray(w_data))
-        X = BlockscaledArray(sm1xx(CuArray(x_scale)), CuArray(x_data))
+        W = BlockscaledArray(f8_4x128(CuArray(w_scale)), CuArray(w_data))
+        X = BlockscaledArray(f8_4x128(CuArray(x_scale)), CuArray(x_data))
         C = CUDACore.zeros(Float32, M, N)
 
         @test cuBLASLt.matmul_supported(C, transpose(W), X)
@@ -57,8 +57,8 @@ end
 
     C_ref = blockscaled_gemm_reference(w_data, w_scale, x_data, x_scale, block)
 
-    W = BlockscaledArray(sm1xx(CuArray(w_scale)), CuArray(w_data))
-    X = BlockscaledArray(sm1xx(CuArray(x_scale)), CuArray(x_data))
+    W = BlockscaledArray(f8_4x128(CuArray(w_scale)), CuArray(w_data))
+    X = BlockscaledArray(f8_4x128(CuArray(x_scale)), CuArray(x_data))
 
     @testset "α=$α, β=$β" for (α, β) in ((2.0f0, 0.0f0), (1.0f0, 1.0f0), (0.5f0, 0.5f0))
         C_prev = CuArray(rand(Float32, M, N))
@@ -86,8 +86,8 @@ end
 
     C_ref = blockscaled_gemm_reference(w_data, w_scale, x_data, x_scale, block)
 
-    W = BlockscaledArray(sm1xx(CuArray(w_scale)), CuArray(w_data))
-    X = BlockscaledArray(sm1xx(CuArray(x_scale)), CuArray(x_data))
+    W = BlockscaledArray(f8_4x128(CuArray(w_scale)), CuArray(w_data))
+    X = BlockscaledArray(f8_4x128(CuArray(x_scale)), CuArray(x_data))
 
     @testset "α=$αv, β=$βv (device, device)" for (αv, βv) in ((1.0f0, 0.0f0), (2.0f0, 0.0f0), (0.5f0, 0.5f0))
         α = CuArray(fill(αv))
@@ -117,8 +117,8 @@ end
 
     C_ref = blockscaled_gemm_reference(w_data, w_scale, x_data, x_scale, block)
 
-    W = BlockscaledArray(sm1xx(CuArray(w_scale)), CuArray(w_data))
-    X = BlockscaledArray(sm1xx(CuArray(x_scale)), CuArray(x_data))
+    W = BlockscaledArray(f8_4x128(CuArray(w_scale)), CuArray(w_data))
+    X = BlockscaledArray(f8_4x128(CuArray(x_scale)), CuArray(x_data))
 
     @testset "Dtype=$Dtype" for Dtype in (Float32, Float16, BFloat16)
         C = CUDACore.zeros(Dtype, M, N)
@@ -144,8 +144,8 @@ end
 
     C_ref = blockscaled_gemm_reference(w_data, w_scale, x_data, x_scale, block)
 
-    W = BlockscaledArray(sm1xx(CuArray(w_scale)), CuArray(w_data))
-    X = BlockscaledArray(sm1xx(CuArray(x_scale)), CuArray(x_data))
+    W = BlockscaledArray(f8_4x128(CuArray(w_scale)), CuArray(w_data))
+    X = BlockscaledArray(f8_4x128(CuArray(x_scale)), CuArray(x_data))
 
     @testset "Dtype=$Dtype" for Dtype in (Float32, Float16, BFloat16)
         C = CUDACore.zeros(Dtype, M, N)
@@ -176,8 +176,8 @@ end
 
         C_ref = blockscaled_gemm_reference(w_data, w_scale, x_data, x_scale, block)
 
-        W = BlockscaledArray(sm1xx(CuArray(w_scale)), NarrowArray{Element}(CuArray(w_data)))
-        X = BlockscaledArray(sm1xx(CuArray(x_scale)), NarrowArray{Element}(CuArray(x_data)))
+        W = BlockscaledArray(f8_4x128(CuArray(w_scale)), NarrowArray{Element}(CuArray(w_data)))
+        X = BlockscaledArray(f8_4x128(CuArray(x_scale)), NarrowArray{Element}(CuArray(x_data)))
         C = CUDACore.zeros(Float32, M, N)
 
         @test cuBLASLt.matmul_supported(C, transpose(W), X)
@@ -203,8 +203,8 @@ end
 
     C_ref = blockscaled_gemm_reference(w_data, w_scale, x_data, x_scale, block)
 
-    W = BlockscaledArray(sm1xx(CuArray(w_scale)), NarrowArray{Element}(CuArray(w_data)))
-    X = BlockscaledArray(sm1xx(CuArray(x_scale)), NarrowArray{Element}(CuArray(x_data)))
+    W = BlockscaledArray(f8_4x128(CuArray(w_scale)), NarrowArray{Element}(CuArray(w_data)))
+    X = BlockscaledArray(f8_4x128(CuArray(x_scale)), NarrowArray{Element}(CuArray(x_data)))
 
     @testset "Dtype=$Dtype" for Dtype in (Float32, Float16, BFloat16)
         C = CUDACore.zeros(Dtype, M, N)
@@ -235,8 +235,8 @@ end
             x_data[:,:,b], x_scale[:,:,b], block)
     end
 
-    W = BlockscaledArray(sm1xx(CuArray(w_scale)), CuArray(w_data))
-    X = BlockscaledArray(sm1xx(CuArray(x_scale)), CuArray(x_data))
+    W = BlockscaledArray(f8_4x128(CuArray(w_scale)), CuArray(w_data))
+    X = BlockscaledArray(f8_4x128(CuArray(x_scale)), CuArray(x_data))
 
     @testset "$label" for (label, Wt) in (
         "batched_transpose" => batched_transpose(W),
@@ -426,7 +426,7 @@ end
     w_data  = CuArray(Element.(randn(K, M)))
     x_data  = CuArray(Element.(randn(K, N)))
 
-    W = BlockscaledArray(sm1xx(w_scale), w_data)
+    W = BlockscaledArray(f8_4x128(w_scale), w_data)
     @test cuBLASLt.scale_mode(W) == :vec32_ue8m0
 
     # raw (unswizzled) scale arrays must be refused before they reach the

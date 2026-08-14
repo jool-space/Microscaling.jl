@@ -1,7 +1,7 @@
 module cuDNNExt
 
 using Microscaling:
-    Sm1xxArray, NarrowArray,
+    F8_4x128Array, NarrowArray,
     Float8_E4M3FN, Float8_E5M2, Float8_E8M0FNU, Float4_E2M1FN,
     BlockscaledArray,
     block_size, scale_type, element_type, elements, scales
@@ -81,9 +81,9 @@ function block_scale_tensors!(g::Graph, A::BlockscaledArray{<:Any,N},
     rank >= N || throw(ArgumentError(
         "cannot declare a $N-dimensional block-scaled operand at rank $rank"))
     bs = mx_block_size(A)
-    scales(A) isa Sm1xxArray || throw(ArgumentError(
+    scales(A) isa F8_4x128Array || throw(ArgumentError(
         "cuDNN accesses block scales through a swizzled tiled layout, " *
-        "but the scales are a $(nameof(typeof(scales(A)))); wrap them with `sm1xx`"))
+        "but the scales are a $(nameof(typeof(scales(A)))); wrap them with `f8_4x128`"))
     edims, estrides = lift(present(size(elements(A)), perm)..., rank)
     sdims, sstrides = lift(present(size(scales(A)), perm)..., rank)
     element = cuDNN.tensor!(g; dims=edims, strides=estrides, dtype=element_type(A),
@@ -96,7 +96,7 @@ end
 
 # swizzled scales and sub-byte packed elements both present a layout the dense
 # stride comparison cannot express; check what their storage admits
-function cuDNN.checked_array_pointer(t::Tensor, a::Union{Sm1xxArray,NarrowArray})
+function cuDNN.checked_array_pointer(t::Tensor, a::Union{F8_4x128Array,NarrowArray})
     parent(a) isa cuDNN.DenseCuArray || throw(ArgumentError(
         "binding for $(t.name) needs GPU-backed storage, got $(typeof(parent(a)))"))
     cuDNN.graph_dtype(eltype(a)) == t.dtype || throw(ArgumentError(
