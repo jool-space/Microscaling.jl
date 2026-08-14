@@ -51,6 +51,30 @@
         @test copy(T) == y
     end
 
+    @testset "structural dispatch" begin
+        # factor names are canonicalized out of the type: any naming of the
+        # f8_4x128 grouping/permutation with the declared 4/4/32 tile sizes
+        # is the same concrete type and dispatches as F8_4x128Array
+        x = Float8_E8M0FNU.(2.0f0 .^ rand(-3:3, 8, 256))
+        S = swizzle(x, ((:a, :b), (:c, :d, :e), ..) --> (:a, :d, :c, :b, :e, ..);
+                    a = 4, d = 4, c = 32)
+        @test S isa F8_4x128Array
+        @test typeof(S) === typeof(swizzle(x, :f8_4x128))
+        @test S == x
+
+        # a crossed mapping is a different layout, not the f8 swizzle
+        C = swizzle(x, ((:a, :b), (:c, :d, :e), ..) --> (:d, :a, :c, :b, :e, ..);
+                    a = 4, d = 4, c = 32)
+        @test !(C isa F8_4x128Array)
+        @test C == x
+
+        # same structure but different declared tile sizes is not f8 either
+        D = swizzle(x, ((:a, :b), (:c, :d, :e), ..) --> (:a, :d, :c, :b, :e, ..);
+                    a = 8, d = 4, c = 16)
+        @test !(D isa F8_4x128Array)
+        @test D == x
+    end
+
     @testset "as blockscaled scales" begin
         elements = Float8_E4M3FN.(randn(Float32, 256, 256))
         scales = Float8_E8M0FNU.(2.0f0 .^ rand(-2:2, 8, 256))
@@ -69,6 +93,30 @@
         @test_throws ArgumentError swizzle(rand(Float32, 4, 128), :nope)
         @test_throws ArgumentError swizzle(rand(Float32, 4, 4), (:a, :b) --> (:a, :c))
         @test_throws ArgumentError swizzle(rand(Float32, 4, 4), (:a, :b, ..) --> (:b, :a))
+    end
+
+    @testset "display and pattern recovery" begin
+        scales = Float8_E8M0FNU.(2.0f0 .^ rand(-3:3, 8, 256))
+        S = swizzle(scales, :f8_4x128)
+
+        @test Einops.ArrowPattern(S) ==
+              (((:k1, :k0), (:m1, :m2, :m0)) --> (:k1, :m2, :m1, :k0, :m0))
+
+        str = summary(S)
+        @test startswith(str, "8×256 F8_4x128Array{")   # alias-aware type display
+        @test occursin("\"(k1 k0) (m1 m2 m0) -> k1 m2 m1 k0 m0\"", str)
+        @test occursin("where k1=4, m1=32, m2=4", str)
+
+        # non-alias patterns elide the Pattern parameters; nothing declared,
+        # so no where clause
+        G = swizzle(rand(Float32, 6, 4), (:a, :b) --> (:b, :a))
+        @test occursin("SwizzledArray{Float32, 2, Pattern{…}, ", summary(G))
+        @test occursin("\"a b -> b a\"", summary(G))
+        @test !occursin("where", summary(G))
+
+        # batch dims render as a trailing ellipsis
+        B = swizzle(Float8_E8M0FNU.(2.0f0 .^ rand(-3:3, 4, 128, 3)), :f8_4x128)
+        @test occursin("\"(k1 k0) (m1 m2 m0) ... -> k1 m2 m1 k0 m0 ...\"", summary(B))
     end
 
     @testset "adapt" begin

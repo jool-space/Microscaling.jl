@@ -14,7 +14,8 @@ Base.size(s::F8_4x128TileArray) = s.size
 Base.eltype(::F8_4x128TileArray{T}) where T = T
 Base.ndims(::F8_4x128TileArray{T,N}) where {T,N} = N
 
-function Adapt.adapt_structure(to::ct.KernelAdaptor, x::F8_4x128Array)
+function Adapt.adapt_structure(to::ct.KernelAdaptor,
+        x::F8_4x128Array{T,N,X}) where {T,N,X<:AbstractArray{T}}
     # for coalesced loads
     x′ = @reshape(parent(x), "k1 m2 m1 k0 m0 ... -> (k1 m2 m1) k0 m0 ...")
     return F8_4x128TileArray(size(x), Adapt.adapt(to, x′))
