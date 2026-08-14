@@ -62,7 +62,7 @@ performs the factor decomposition/composition implied by the pattern, and
 taken from the storage dimensions, with the `context` supplying (and
 checking) any that a grouped storage axis cannot determine alone.
 
-The layout's type identity is its [`Pattern`](@ref): the grouping and
+The layout's type identity is its `Pattern` type parameter: the grouping and
 permutation with factor names canonicalized to positions, plus the sizes
 declared in the `context`. Two spellings of the same layout produce the
 identical concrete type — the names survive only as a runtime field (an
@@ -181,10 +181,17 @@ swizzle(x::AbstractArray, name::Symbol) =
 SwizzledArray(x::AbstractArray, name::Symbol) =
     (p = preset(name); SwizzledArray(x, p.pattern; p.context...))
 
-# Dispatch alias for arrays swizzled with the :f8_4x128 layout. Names are
-# canonicalized out of the type, so any naming of this grouping/permutation
-# with the declared 4/4/32 tile sizes is this exact concrete type; a crossed
-# mapping or different declared sizes is a different `Pattern`.
+"""
+    F8_4x128Array{T,N,X}
+    F8_4x128Array(storage)
+
+Dispatch alias for a [`SwizzledArray`](@ref) carrying the `:f8_4x128`
+layout. Names are canonicalized out of the type, so any naming of this
+grouping/permutation with the declared 4/4/32 tile sizes is this exact
+concrete type; a crossed mapping or different declared sizes is a different
+`Pattern`. The constructor form wraps existing swizzled `storage`,
+like `SwizzledArray(storage, :f8_4x128)`.
+"""
 const F8_4x128Array{T,N,X} = SwizzledArray{T,N,
     Pattern{((1, 2), (3, 4, 5)),           # (k1 k0) (m1 m2 m0)
             (1, 4, 3, 2, 5),               # k1 m2 m1 k0 m0

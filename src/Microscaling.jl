@@ -20,7 +20,7 @@ public block_size, scale_type, element_type
 
 include("swizzle.jl")
 export SwizzledArray, swizzle, f8_4x128
-public F8_4x128Array, SWIZZLES, Pattern
+public F8_4x128Array, SWIZZLES, ArrowPattern
 
 # deprecated aliases (the layout's former CUTLASS-derived name)
 Base.@deprecate_binding Sm1xxArray F8_4x128Array
