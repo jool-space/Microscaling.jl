@@ -163,6 +163,11 @@ end
     Ws = swizzle(CuArray(batch1(w_scale)), :f8_4x128)
     @test size(Ws) == (K_s, M, 1)
     @test Microscaling.padded_size(Ws) == (K_s, 256, 1)
+
+    # the mutating tier reproduces the same padded storage on the GPU
+    Ws2 = SwizzledArray(similar(parent(Ws)), :f8_4x128; dims=(K_s, M))
+    @test swizzle!(Ws2, CuArray(batch1(w_scale))) === Ws2
+    @test Array(parent(Ws2)) == Array(parent(Ws))
     W = BlockscaledArray(Ws, CuArray(batch1(w_element)))
     X = BlockscaledArray(f8_4x128(CuArray(batch1(x_scale))), CuArray(batch1(x_element)))
     D = CUDACore.zeros(Float32, M, N)

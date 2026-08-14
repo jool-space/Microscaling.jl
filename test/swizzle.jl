@@ -42,6 +42,10 @@
         @test copy(S) == x
         @test SwizzledArray(parent(S), (:a, (:b, :c)) --> (:b, :a, :c)) == x
 
+        # sides may be passed separately, no --> required
+        @test typeof(swizzle(x, (:a, (:b, :c)), (:b, :a, :c); b = 2)) === typeof(S)
+        @test SwizzledArray(parent(S), (:a, (:b, :c)), (:b, :a, :c)) == x
+
         # grouped storage side, with a batch ellipsis
         y = rand(Float32, 6, 4, 3)
         T = swizzle(y, ((:a, :b), :c, ..) --> (:c, (:b, :a), ..); a = 2)
@@ -119,6 +123,47 @@
         G = swizzle(g, (:a, (:b, :c)) --> (:b, :a, :c); b = 2)
         @test size(G) == (5, 3) && Microscaling.padded_size(G) == (5, 4)
         @test G == g && copy(G) == g
+    end
+
+    @testset "mutating tier" begin
+        # unpadded: one permutedims!, storage identical to the allocating tier
+        x = Float8_E8M0FNU.(2.0f0 .^ rand(-3:3, 8, 256))
+        S = swizzle(x, :f8_4x128)
+        D = SwizzledArray(similar(parent(S)), :f8_4x128)
+        @test swizzle!(D, x) === D
+        @test parent(D) == parent(S)
+
+        # padded: staging zero-fills, so the pad slots match too
+        y = Float8_E8M0FNU.(2.0f0 .^ rand(-3:3, 8, 200))
+        P = swizzle(y, :f8_4x128)
+        Dp = SwizzledArray(similar(parent(P)), :f8_4x128; dims=(8, 200))
+        @test swizzle!(Dp, y) === Dp
+        @test parent(Dp) == parent(P)
+        @test Dp == y
+
+        # overwrites previous contents, pad slots included
+        fill!(parent(Dp), Float8_E8M0FNU(2.0f0))
+        swizzle!(Dp, y)
+        @test parent(Dp) == parent(P)
+
+        # batch dims pass through
+        b = Float8_E8M0FNU.(2.0f0 .^ rand(-3:3, 4, 100, 3))
+        B = swizzle(b, :f8_4x128)
+        Db = SwizzledArray(similar(parent(B)), :f8_4x128; dims=(4, 100))
+        @test swizzle!(Db, b) === Db
+        @test parent(Db) == parent(B)
+
+        # grouped storage side exercises the merge reshape
+        g = rand(Float32, 6, 4)
+        gp = ((:a, :b), :c, ..) --> (:c, (:b, :a), ..)
+        G = swizzle(g, gp; a = 2)
+        Dg = SwizzledArray(similar(parent(G)), gp; a = 2)
+        @test swizzle!(Dg, g) === Dg
+        @test parent(Dg) == parent(G)
+
+        # contracts
+        @test_throws DimensionMismatch swizzle!(D, y)
+        @test_throws ArgumentError swizzle!(D, rand(Float32, 8, 256))
     end
 
     @testset "as blockscaled scales" begin
