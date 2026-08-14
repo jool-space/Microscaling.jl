@@ -75,6 +75,52 @@
         @test D == x
     end
 
+    @testset "tile padding" begin
+        # rows pad to whole 128-tiles: logical 200 -> physical 256
+        scales = Float8_E8M0FNU.(2.0f0 .^ rand(-3:3, 8, 200))
+        S = swizzle(scales, :f8_4x128)   # padding is the default
+
+        @test S isa F8_4x128Array
+        @test size(S) == (8, 200)
+        @test Microscaling.padded_size(S) == (8, 256)
+        @test size(parent(S)) == (4, 4, 32, 2, 2)
+        @test S == scales
+        @test copy(S) == scales
+        @test_throws BoundsError S[1, 201]
+
+        # pad=false refuses the same shape
+        @test_throws ArgumentError swizzle(scales, :f8_4x128; pad=false)
+
+        # the shorthand forwards kwargs
+        @test f8_4x128(scales) == scales
+        @test_throws ArgumentError f8_4x128(scales; pad=false)
+
+        # wrapping pre-padded storage takes the logical dims as a kwarg
+        W = SwizzledArray(parent(S), :f8_4x128; dims=(8, 200))
+        @test size(W) == (8, 200) && W == scales
+        @test_throws DimensionMismatch SwizzledArray(parent(S), :f8_4x128;
+                                                     dims=(8, 300))
+
+        # scale-column axis pads to whole 4-groups, zero-filled
+        x = rand(Float32, 6, 128) .+ 1
+        S2 = swizzle(x, :f8_4x128)
+        @test size(S2) == (6, 128) && Microscaling.padded_size(S2) == (8, 128)
+        @test S2 == x && copy(S2) == x
+        @test count(!iszero, parent(S2)) == 6 * 128
+
+        # batch dims pass through unpadded
+        b = Float8_E8M0FNU.(2.0f0 .^ rand(-3:3, 4, 100, 3))
+        B = swizzle(b, :f8_4x128)
+        @test size(B) == (4, 100, 3) && Microscaling.padded_size(B) == (4, 128, 3)
+        @test B == b && copy(B) == b
+
+        # generic patterns pad too
+        g = rand(Float32, 5, 3)
+        G = swizzle(g, (:a, (:b, :c)) --> (:b, :a, :c); b = 2)
+        @test size(G) == (5, 3) && Microscaling.padded_size(G) == (5, 4)
+        @test G == g && copy(G) == g
+    end
+
     @testset "as blockscaled scales" begin
         elements = Float8_E4M3FN.(randn(Float32, 256, 256))
         scales = Float8_E8M0FNU.(2.0f0 .^ rand(-2:2, 8, 256))
@@ -86,11 +132,18 @@
 
     @testset "validation" begin
         @test_throws ArgumentError swizzle(rand(Float32, 8), :f8_4x128)
-        @test_throws ArgumentError swizzle(rand(Float32, 2, 128), :f8_4x128)
-        @test_throws ArgumentError swizzle(rand(Float32, 8, 64), :f8_4x128)
+        @test_throws ArgumentError swizzle(rand(Float32, 2, 128), :f8_4x128;
+                                           pad=false)
+        @test_throws ArgumentError swizzle(rand(Float32, 8, 64), :f8_4x128;
+                                           pad=false)
         @test_throws ArgumentError SwizzledArray(rand(Float32, 4, 4, 32, 2), :f8_4x128)
         @test_throws DimensionMismatch SwizzledArray(rand(Float32, 2, 4, 32, 2, 2), :f8_4x128)
         @test_throws ArgumentError swizzle(rand(Float32, 4, 128), :nope)
+        # mistyped keywords must not be silently swallowed as context
+        @test_throws ArgumentError swizzle(rand(Float32, 8, 256), :f8_4x128;
+                                           padded=true)
+        @test_throws ArgumentError SwizzledArray(rand(Float32, 4, 4, 32, 2, 2),
+                                                 :f8_4x128; blocksize=32)
         @test_throws ArgumentError swizzle(rand(Float32, 4, 4), (:a, :b) --> (:a, :c))
         @test_throws ArgumentError swizzle(rand(Float32, 4, 4), (:a, :b, ..) --> (:b, :a))
     end

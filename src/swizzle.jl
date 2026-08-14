@@ -51,6 +51,14 @@ struct Pattern{L,R,C} end
 
 canonical(side, pos) = map(g -> g isa Symbol ? pos[g] : map(f -> pos[f], g), side)
 
+# reject context names that are not factors of the pattern — otherwise a
+# mistyped keyword (e.g. `padded=true` for `pad=true`) is silently ignored
+function check_context(ctx, L, p)
+    unknown = setdiff(keys(ctx), factors(L))
+    isempty(unknown) || throw(ArgumentError(
+        "context names $(Tuple(unknown)) are not factors of $p"))
+end
+
 """
     SwizzledArray(storage, pattern; context...)
     SwizzledArray(storage, preset::Symbol)
@@ -81,11 +89,12 @@ end
 Base.parent(s::SwizzledArray) = s.x
 Base.size(s::SwizzledArray) = s.dims
 
-function SwizzledArray(x::AbstractArray{T}, p::ArrowPattern; context...) where T
+function SwizzledArray(x::AbstractArray{T}, p::ArrowPattern; dims=nothing, context...) where T
     L, R, rest = sides(p)
     (rest ? ndims(x) >= length(R) : ndims(x) == length(R)) ||
         throw(ArgumentError("storage of rank $(ndims(x)) does not match the \
                              $(length(R))-axis storage side of $p"))
+    check_context(NamedTuple(context), L, p)
     sizes = Dict{Symbol,Int}(pairs(NamedTuple(context)))
     for (axis, group) in enumerate(R)
         sz = size(x, axis)
@@ -111,14 +120,40 @@ function SwizzledArray(x::AbstractArray{T}, p::ArrowPattern; context...) where T
     end
     names = Tuple(factors(L))
     sizesc = map(n -> sizes[n], names)
-    dims = (map(g -> g isa Symbol ? sizes[g] : prod(f -> sizes[f], g), L)...,
+    full = (map(g -> g isa Symbol ? sizes[g] : prod(f -> sizes[f], g), L)...,
             size(x)[length(R)+1:end]...)
+    # a tile-padded array's logical extents are smaller than the factor
+    # products and cannot be inferred from the storage; take them as a kwarg
+    if dims === nothing
+        dims = full
+    else
+        length(dims) == length(L) || throw(ArgumentError(
+            "logical dims cover the pattern's $(length(L)) dense axes, \
+             got $(length(dims))"))
+        all(map((d, f) -> 1 <= d <= f, Tuple(dims), full[1:length(L)])) ||
+            throw(DimensionMismatch("logical dims $(Tuple(dims)) do not fit the \
+                                     storage's dense extents $(full[1:length(L)])"))
+        dims = (Int.(Tuple(dims))..., full[length(L)+1:end]...)
+    end
     N = length(dims)
     ctx = NamedTuple(context)
     pos = NamedTuple{names}(ntuple(identity, length(names)))
     C = map(n -> haskey(ctx, n) ? Int(ctx[n]) : nothing, names)
     P = Pattern{canonical(L, pos),canonical(R, pos),C}
     return SwizzledArray{T,N,P,typeof(x),length(names)}(x, dims, sizesc, names)
+end
+
+"""
+    padded_size(s::SwizzledArray)
+
+The physical dense extents implied by the factor sizes — the tile-padded
+shape the storage serves. Equal to `size(s)` when the array is not padded.
+"""
+@generated function padded_size(s::SwizzledArray{T,N,Pattern{L,R,C}}) where {T,N,L,R,C}
+    ex = Any[g isa Int ? :(s.sizes[$g]) : :(*($(map(f -> :(s.sizes[$f]), g)...)))
+             for g in L]
+    append!(ex, (:(size(parent(s), $(length(R) + k))) for k in 1:N-length(L)))
+    return :(tuple($(ex...)))
 end
 
 """
@@ -149,21 +184,44 @@ symbol names a `pattern`/`context` pair from `Microscaling.SWIZZLES`:
     with `k1 = 4, m2 = 4, m1 = 32`. Each tile serves 4 scale columns by 128
     rows, the `(4, 4, 32)` leading storage dims being the tile-internal
     warp-group interleave.
+
+Dense axes that do not tile exactly are zero-filled up to whole tiles by
+default (for `:f8_4x128`: rows to multiples of 128, scale columns to
+multiples of 4, matching the vendor padding contract). The wrapper still
+presents the unpadded logical shape — [`padded_size`](@ref) gives the
+physical extents, and `copy` slices the pad back off. Pass `pad = false` to
+refuse non-tiling shapes instead.
 """
-function swizzle(x::AbstractArray, p::ArrowPattern; context...)
+function swizzle(x::AbstractArray, p::ArrowPattern; pad::Bool=true, context...)
     ctx = NamedTuple(context)
     L, _, rest = sides(p)
     (rest ? ndims(x) >= length(L) : ndims(x) == length(L)) ||
         throw(ArgumentError("array of rank $(ndims(x)) does not match the \
                              $(length(L))-axis dense side of $p"))
-    for (axis, group) in enumerate(L)
-        group isa Symbol && continue
-        known = prod(Int[ctx[f] for f in group if haskey(ctx, f)]; init=1)
-        size(x, axis) % known == 0 || throw(ArgumentError(
-            "axis $axis of size $(size(x, axis)) is not divisible by $known \
-             as $group requires"))
+    check_context(ctx, L, p)
+    np = length(L)
+    targets = ntuple(np) do axis
+        g = L[axis]
+        sz = size(x, axis)
+        t = if g isa Symbol
+            get(ctx, g, sz)
+        else
+            known = prod(Int[ctx[f] for f in g if haskey(ctx, f)]; init=1)
+            any(f -> !haskey(ctx, f), g) ? cld(sz, known) * known : known
+        end
+        t >= sz || throw(ArgumentError(
+            "axis $axis of size $sz exceeds its declared extent $t"))
+        t
     end
-    return SwizzledArray(rearrange(x, p; ctx...), p; ctx...)
+    logical = ntuple(axis -> size(x, axis), np)
+    targets == logical &&
+        return SwizzledArray(rearrange(x, p; ctx...), p; ctx...)
+    pad || throw(ArgumentError(
+        "axes $logical do not tile the pattern's extents $targets exactly, \
+         and `pad=false` refuses zero-fill padding"))
+    xp = fill!(similar(x, (targets..., size(x)[np+1:end]...)), zero(eltype(x)))
+    copyto!(view(xp, axes(x)...), x)
+    return SwizzledArray(rearrange(xp, p; ctx...), p; dims=logical, ctx...)
 end
 
 const SWIZZLES = (;
@@ -176,10 +234,10 @@ preset(name::Symbol) = haskey(SWIZZLES, name) ? SWIZZLES[name] :
     throw(ArgumentError("unknown swizzle preset :$name; available: \
                          $(join(map(k -> ":$k", keys(SWIZZLES)), ", "))"))
 
-swizzle(x::AbstractArray, name::Symbol) =
-    (p = preset(name); swizzle(x, p.pattern; p.context...))
-SwizzledArray(x::AbstractArray, name::Symbol) =
-    (p = preset(name); SwizzledArray(x, p.pattern; p.context...))
+swizzle(x::AbstractArray, name::Symbol; kws...) =
+    (p = preset(name); swizzle(x, p.pattern; kws..., p.context...))
+SwizzledArray(x::AbstractArray, name::Symbol; kws...) =
+    (p = preset(name); SwizzledArray(x, p.pattern; kws..., p.context...))
 
 """
     F8_4x128Array{T,N,X}
@@ -197,14 +255,15 @@ const F8_4x128Array{T,N,X} = SwizzledArray{T,N,
             (1, 4, 3, 2, 5),               # k1 m2 m1 k0 m0
             (4, nothing, 32, 4, nothing)}, # k1 = 4, m1 = 32, m2 = 4
     X, 5}
-F8_4x128Array(x::AbstractArray) = SwizzledArray(x, :f8_4x128)
+# the wrap-constructor spelling forwards kwargs too (e.g. `dims` for padded storage)
+F8_4x128Array(x::AbstractArray; kws...) = SwizzledArray(x, :f8_4x128; kws...)
 
 """
-    f8_4x128(x::AbstractArray)
+    f8_4x128(x::AbstractArray; kws...)
 
-Shorthand for [`swizzle`](@ref)`(x, :f8_4x128)`.
+Shorthand for [`swizzle`](@ref)`(x, :f8_4x128; kws...)`.
 """
-f8_4x128(x::AbstractArray) = swizzle(x, :f8_4x128)
+f8_4x128(x::AbstractArray; kws...) = swizzle(x, :f8_4x128; kws...)
 
 # ## Element access
 #
@@ -260,7 +319,11 @@ end
     p = N > length(L) ? (Rp..., ..) --> (Lp..., ..) : Rp --> Lp
     nf = sum(g -> g isa Int ? 1 : length(g), L)
     keys = ntuple(name, nf)
-    return :(rearrange(parent(s), $p; NamedTuple{$keys}(s.sizes)...))
+    return quote
+        y = rearrange(parent(s), $p; NamedTuple{$keys}(s.sizes)...)
+        # a tile-padded array's dense form carries the pad; slice it back off
+        return size(y) == size(s) ? y : y[map(Base.OneTo, size(s))...]
+    end
 end
 
 function Adapt.adapt_structure(to, s::SwizzledArray{T,N,P,X,F}) where {T,N,P,X,F}
@@ -284,7 +347,7 @@ function Base.showarg(io::IO, s::SwizzledArray{T,N,Pattern{L,R,C},X,F},
         print(io, "SwizzledArray{", T, ", ", N, ", Pattern{…}, ", X, ", ", F, "}")
     end
     toplevel || return
-    print(" with swizzle")
+    print(io, " with swizzle")
     l, r = sidestring(L, s.names), sidestring(R, s.names)
     N > length(L) && (l *= " ..."; r *= " ...")
     print(io, " ")

@@ -141,6 +141,41 @@ end
     end
 end
 
+@testset "cuDNN MXFP8 — tile-padded scales" begin
+    # M % 128 != 0: the scale row extent pads to whole 128-tiles. The wrapper
+    # presents the logical shape while the graph declares (and the engine
+    # reads) the physical zero-filled whole-tile storage.
+    Random.seed!(21)
+
+    Scale   = Float8_E8M0FNU
+    Element = Float8_E4M3FN
+    block = 32
+    M, N, K = 192, 128, 128
+    K_s = K ÷ block
+
+    w_element = Element.(randn(K, M))
+    x_element = Element.(randn(K, N))
+    w_scale = Scale.(rand(K_s, M))
+    x_scale = Scale.(rand(K_s, N))
+
+    D_ref = blockscaled_gemm_reference(w_element, w_scale, x_element, x_scale, block)
+
+    Ws = swizzle(CuArray(batch1(w_scale)), :f8_4x128)
+    @test size(Ws) == (K_s, M, 1)
+    @test Microscaling.padded_size(Ws) == (K_s, 256, 1)
+    W = BlockscaledArray(Ws, CuArray(batch1(w_element)))
+    X = BlockscaledArray(f8_4x128(CuArray(batch1(x_scale))), CuArray(batch1(x_element)))
+    D = CUDACore.zeros(Float32, M, N)
+
+    g = blockscaled_matmul_graph(W, X, Float32)
+    if is_supported(g)
+        blockscaled_matmul!(D, g, W, X)
+        @test isapprox(Array(D), D_ref; rtol = 1e-5, atol = 1e-5)
+    else
+        @test_skip cudnn_blockscale_claimed
+    end
+end
+
 @testset "cuDNN batched MXFP8 — dequantize→matmul graph" begin
     Random.seed!(13)
 

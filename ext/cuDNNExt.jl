@@ -1,7 +1,7 @@
 module cuDNNExt
 
 using Microscaling:
-    F8_4x128Array, NarrowArray,
+    F8_4x128Array, SwizzledArray, NarrowArray, padded_size,
     Float8_E4M3FN, Float8_E5M2, Float8_E8M0FNU, Float4_E2M1FN,
     BlockscaledArray,
     block_size, scale_type, element_type, elements, scales
@@ -85,7 +85,9 @@ function block_scale_tensors!(g::Graph, A::BlockscaledArray{<:Any,N},
         "cuDNN accesses block scales through a swizzled tiled layout, " *
         "but the scales are a $(nameof(typeof(scales(A)))); wrap them with `f8_4x128`"))
     edims, estrides = lift(present(size(elements(A)), perm)..., rank)
-    sdims, sstrides = lift(present(size(scales(A)), perm)..., rank)
+    # a tile-padded scale array presents its logical shape; cuDNN wants the
+    # physical (whole-tile) extents the storage actually serves
+    sdims, sstrides = lift(present(padded_size(scales(A)), perm)..., rank)
     element = cuDNN.tensor!(g; dims=edims, strides=estrides, dtype=element_type(A),
                             name=name * ".element")
     scale = cuDNN.tensor!(g; dims=sdims, strides=sstrides, dtype=scale_type(A),
@@ -101,9 +103,15 @@ function cuDNN.checked_array_pointer(t::Tensor, a::Union{F8_4x128Array,NarrowArr
         "binding for $(t.name) needs GPU-backed storage, got $(typeof(parent(a)))"))
     cuDNN.graph_dtype(eltype(a)) == t.dtype || throw(ArgumentError(
         "binding for $(t.name) has eltype $(eltype(a)), expected $(t.dtype)"))
-    length(a) == prod(t.dims) || throw(DimensionMismatch(
-        "binding for $(t.name) has $(length(a)) elements, expected $(prod(t.dims))"))
+    stored_length(a) == prod(t.dims) || throw(DimensionMismatch(
+        "binding for $(t.name) stores $(stored_length(a)) elements, \
+         expected $(prod(t.dims))"))
     return pointer(parent(a))
 end
+
+# what the binding's storage physically serves: a tile-padded SwizzledArray
+# presents its logical shape but stores (and the graph declares) whole tiles
+stored_length(a::SwizzledArray) = length(parent(a))
+stored_length(a::NarrowArray) = length(a)
 
 end
