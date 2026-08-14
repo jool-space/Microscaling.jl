@@ -4,12 +4,9 @@ using Einops: ArrowPattern
 
 # ## Pattern plumbing
 #
-# A swizzle is an Einops `ArrowPattern`: dense (logical) layout on the left,
-# swizzled storage layout on the right. Sides are tuples of factor symbols or
-# grouped factor tuples (column-major: first factor fastest), optionally
-# ending in a shared trailing ellipsis for pass-through batch dimensions.
-# Resolution is a cold path in plain value code; the hot paths — `getindex`
-# and the fused permute — are generated from the type-level pattern.
+# A swizzle is an Einops `ArrowPattern`: dense layout left, storage layout
+# right; groups are column-major, a shared trailing ellipsis passes batch
+# dims through. Resolution is cold value code; the hot paths are generated.
 
 function sides(p::ArrowPattern{L,R}) where {L,R}
     strip(side) = !isempty(side) && side[end] isa typeof(..) ?
@@ -30,21 +27,17 @@ end
 
 factors(side) = Symbol[f for e in side for f in (e isa Symbol ? (e,) : e)]
 
-# The layout's type identity: the side trees with factor names canonicalized
-# to dense-side positions, plus `C`, the declared context size per factor
-# (`nothing` where free). Any naming of one layout is one concrete type, so
-# aliases like `F8_4x128Array` dispatch by plain equality, and different
-# declared sizes are a different layout. Purely type-level; never instantiated.
+# Type identity: the side trees with names canonicalized to dense-side
+# positions, plus declared context sizes `C` (`nothing` = free) — any naming
+# of one layout is one concrete type. Never instantiated.
 struct Pattern{L,R,C} end
 
 canonical(side, pos) = map(g -> g isa Symbol ? pos[g] : map(f -> pos[f], g), side)
 
 # ## Resolution
 #
-# A name→size ledger parallel to the flat factor list (0 = unresolved),
-# seeded from the context — whose names must be factors, so a mistyped
-# keyword is not silently ignored — then solved group by group against axis
-# extents: storage axes when wrapping, padded dense targets in `swizzle`.
+# A name→size ledger (0 = unresolved), seeded from the context — whose names
+# are checked, so a mistyped keyword errors — then solved group by group.
 
 function ledger(names, ctx, p)
     unknown = Tuple(k for k in keys(ctx) if !(k in names))
@@ -87,17 +80,12 @@ end
     SwizzledArray(storage, left, right; context...)
     SwizzledArray(storage, preset::Symbol)
 
-Present `storage`, laid out per the right side of the Einops `pattern`, as
-the dense equivalent its left side describes: `getindex` maps indices
-through the pattern, `copy` rearranges back to a dense array. Factor sizes
-come from the storage dimensions, with `context` supplying (and checking)
-any a grouped storage axis cannot determine alone.
+Present `storage`, laid out per the `pattern`'s right side, as the dense
+array its left side describes. Factor sizes come from the storage dims;
+`context` supplies (and checks) any a grouped axis cannot determine alone.
 
-Type identity is the `Pattern` parameter — grouping, permutation, and
-declared sizes, with names erased to positions — so two spellings of one
-layout share a concrete type. The names live on as a runtime display field;
-`Einops.ArrowPattern(s)` respells the pattern from them.
-
+Type identity is the name-erased `Pattern` parameter, so two spellings of
+one layout share a concrete type; `Einops.ArrowPattern(s)` respells it.
 Use [`swizzle`](@ref) to produce one from a dense array.
 """
 struct SwizzledArray{T,N,P<:Pattern,X<:AbstractArray{T},F} <: AbstractArray{T,N}
@@ -124,8 +112,7 @@ function SwizzledArray(x::AbstractArray{T}, p::ArrowPattern; dims=nothing, conte
     fsize(f) = sizes[findfirst(==(f), names)]
     full = (map(g -> g isa Symbol ? fsize(g) : prod(fsize, g), L)...,
             size(x)[length(R)+1:end]...)
-    # a tile-padded array's logical extents are smaller than the factor
-    # products and cannot be inferred from the storage; take them as a kwarg
+    # padded logical extents cannot be inferred from storage; take a kwarg
     if dims === nothing
         dims = full
     else
@@ -146,8 +133,8 @@ end
 """
     padded_size(s::SwizzledArray)
 
-The physical dense extents implied by the factor sizes — the tile-padded
-shape the storage serves. Equal to `size(s)` when the array is not padded.
+The physical dense extents implied by the factor sizes; `size(s)` when
+unpadded.
 """
 @generated function padded_size(s::SwizzledArray{T,N,Pattern{L,R,C}}) where {T,N,L,R,C}
     ex = Any[g isa Int ? :(s.sizes[$g]) : :(*($(map(f -> :(s.sizes[$f]), g)...)))
@@ -159,8 +146,8 @@ end
 """
     Einops.ArrowPattern(s::SwizzledArray)
 
-Respell the (fixed part of the) pattern `s` was swizzled with, using the
-factor names it was constructed under.
+Respell the (fixed part of the) pattern `s` was swizzled with, using its
+construction names.
 """
 function Einops.ArrowPattern(s::SwizzledArray{T,N,Pattern{L,R,C}}) where {T,N,L,R,C}
     name(g) = g isa Int ? s.names[g] : map(f -> s.names[f], g)
@@ -174,19 +161,16 @@ end
 
 Rearrange dense `x` into the swizzled layout the Einops `pattern` describes
 (dense side --> storage side) and wrap it in a [`SwizzledArray`](@ref)
-presenting the original shape. A `preset` names a pattern/context pair from
+presenting the original shape. A `preset` names an entry of
 `Microscaling.SWIZZLES`; `:f8_4x128` is the Blackwell block-scale-factor
-layout — NVIDIA's "128×4 tiled layout", cuDNN's `F8_128x4`, CUTLASS's
-Sm1xx —
-`((:k1, :k0), (:m1, :m2, :m0), ..) --> (:k1, :m2, :m1, :k0, :m0, ..)` with
-`k1 = 4, m2 = 4, m1 = 32`: 4 scale columns by 128 rows per tile, the
-`(4, 4, 32)` leading storage dims being the warp-group interleave.
+layout (NVIDIA's "128×4 tiled layout", cuDNN's `F8_128x4`, CUTLASS's Sm1xx):
+4 scale columns × 128 rows per tile, interleaved as `(4, 4, 32)` leading
+storage dims.
 
-Axes that do not tile exactly are zero-filled up to whole tiles by default
-(for `:f8_4x128`: rows to ×128, scale columns to ×4 — the vendor padding
-contract). The wrapper still presents the logical shape, [`padded_size`](@ref)
-gives the physical extents, and `copy` slices the pad back off; `pad=false`
-refuses instead. Data movement delegates to [`swizzle!`](@ref).
+Axes that do not tile exactly are zero-filled to whole tiles — the vendor
+padding contract. The wrapper keeps the logical shape, [`padded_size`](@ref)
+gives the physical extents, `copy` slices the pad back off, and `pad=false`
+refuses. Data movement delegates to [`swizzle!`](@ref).
 """
 function swizzle(x::AbstractArray, p::ArrowPattern; pad::Bool=true, context...)
     ctx = NamedTuple(context)
@@ -227,14 +211,9 @@ end
     swizzle!(dest::SwizzledArray, x::AbstractArray)
 
 Write dense `x` into `dest`'s swizzled storage in place: one `permutedims!`
-when `dest` is unpadded — no allocations, safe inside a CUDA graph capture —
-and via a transient zero-filled staging buffer at [`padded_size`](@ref) when
-it is tile-padded, `Pol.release!`d after the permute (eager device free,
-GC on host).
-
-The canonicalized pattern makes the whole rearrange one `permutedims!`:
-splitting dense axes into factors and merging storage axes are both free
-reshapes, and the storage-side factor order *is* the permutation.
+between free reshapes (the storage-side factor order *is* the permutation)
+when unpadded — allocation-free, safe under CUDA graph capture — or via a
+transient zero-filled staging buffer, `Pol.release!`d after, when padded.
 """
 function swizzle!(s::SwizzledArray{T,N}, x::AbstractArray) where {T,N}
     size(x) == size(s) || throw(DimensionMismatch(
@@ -282,7 +261,7 @@ swizzle(x::AbstractArray, name::Symbol; kws...) =
 SwizzledArray(x::AbstractArray, name::Symbol; kws...) =
     (p = preset(name); SwizzledArray(x, p.pattern; kws..., p.context...))
 
-# sides may be passed separately, so callers need not reach for Einops' `-->`
+# sides may be passed separately, sparing callers Einops' `-->`
 swizzle(x::AbstractArray, left, right; kws...) = swizzle(x, left --> right; kws...)
 SwizzledArray(x::AbstractArray, left, right; kws...) =
     SwizzledArray(x, left --> right; kws...)
@@ -292,9 +271,8 @@ SwizzledArray(x::AbstractArray, left, right; kws...) =
     F8_4x128Array(storage; kws...)
 
 Dispatch alias for a [`SwizzledArray`](@ref) carrying the `:f8_4x128`
-layout — any naming of that grouping/permutation with the declared 4/4/32
-tile sizes is this exact concrete type. The constructor form is
-`SwizzledArray(storage, :f8_4x128; kws...)`.
+layout — any naming of it is this exact concrete type. The constructor
+form is `SwizzledArray(storage, :f8_4x128; kws...)`.
 """
 const F8_4x128Array{T,N,X} = SwizzledArray{T,N,
     Pattern{((1, 2), (3, 4, 5)),           # (k1 k0) (m1 m2 m0)
@@ -310,11 +288,8 @@ Shorthand for [`swizzle`](@ref)`(x, :f8_4x128; kws...)`.
 """
 f8_4x128(x::AbstractArray; kws...) = swizzle(x, :f8_4x128; kws...)
 
-# ## Element access
-#
-# Decompose each dense index over its left-side group (first factor
-# fastest), recompose per the right-side storage groups; batch dims pass
-# through.
+# ## Element access: decompose each dense index over its left-side group
+# (first factor fastest), recompose per the storage groups.
 
 Base.IndexStyle(::Type{<:SwizzledArray}) = IndexCartesian()
 @generated function Base.getindex(s::SwizzledArray{T,N,Pattern{L,R,C}},
@@ -351,8 +326,7 @@ end
     keys = ntuple(name, sum(g -> g isa Int ? 1 : length(g), L))
     return quote
         y = rearrange(parent(s), $p; NamedTuple{$keys}(s.sizes)...)
-        # a tile-padded array's dense form carries the pad; slice it back off
-        return size(y) == size(s) ? y : y[map(Base.OneTo, size(s))...]
+        return size(y) == size(s) ? y : y[map(Base.OneTo, size(s))...]  # unpad
     end
 end
 
@@ -361,8 +335,7 @@ function Adapt.adapt_structure(to, s::SwizzledArray{T,N,P,X,F}) where {T,N,P,X,F
     return SwizzledArray{eltype(x),N,P,typeof(x),F}(x, s.dims, s.sizes, s.names)
 end
 
-# ## Display: elide the Pattern parameters (the swizzle string carries the
-# same information) and append the pattern and its declared sizes
+# ## Display: elide the Pattern params; append the pattern and declared sizes
 
 sidestring(side, names) =
     join(map(g -> g isa Int ? String(names[g]) :
