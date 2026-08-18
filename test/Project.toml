@@ -14,14 +14,6 @@ cuBLASLt = "448fee3d-7d89-4b6e-8554-2e2b5f03afa7"
 cuDNN = "02a925ec-e4fe-4b08-9a7e-0d78e3d38ccd"
 cuTile = "0dea8319-8c4a-4662-a73d-20234d115b9a"
 
-
-[sources]
-BitPacking = {url = "https://github.com/MurrellGroup/BitPacking.jl", rev = "cudnn-ext"}
-CUDACore = {url = "https://github.com/JuliaGPU/CUDA.jl", rev = "main", subdir = "CUDACore"}
-cuBLAS = {url = "https://github.com/JuliaGPU/CUDA.jl", rev = "main", subdir = "lib/cublas"}
-cuDNN = {url = "https://github.com/JuliaGPU/CUDA.jl", rev = "main", subdir = "lib/cudnn"}
-cuTile = {url = "https://github.com/JuliaGPU/cuTile.jl", rev = "main"}
-
 [compat]
 BFloat16s = "0.6.1"
 CUDACore = "6"
