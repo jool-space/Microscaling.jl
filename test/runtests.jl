@@ -1,8 +1,6 @@
 using Microscaling
-using Microscaling: Float8_E4M3FN, Float8_E5M2, Float8_E8M0FNU, Float4_E2M1FN
 using Microscaling: elements, scales, block_size, scale_type, element_type
-using Microscaling: F8_4x128Array
-using Einops               # -->, and the .. ellipsis (not importable by name)
+using Einops
 using Test
 
 using CUDACore

@@ -1,6 +1,7 @@
 using Adapt
 using Einops
 using Einops: ArrowPattern
+using Pol: release!
 
 # ## Pattern plumbing
 #
