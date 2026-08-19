@@ -38,11 +38,11 @@ end
 
     Z_ref = blockscaled_gemm_reference(x_data, x_scale, y_data, y_scale, block_size)
 
-    X = BlockscaledArray(sm1xx(CuArray(x_scale)), CuArray(x_data))
-    Y = BlockscaledArray(sm1xx(CuArray(y_scale)), CuArray(y_data))
-    Z = CUDA.zeros(Float32, M, N)
+    X = BlockscaledArray(f8_4x128(CuArray(x_scale)), CuArray(x_data))
+    Y = BlockscaledArray(f8_4x128(CuArray(y_scale)), CuArray(y_data))
+    Z = CUDACore.zeros(Float32, M, N)
 
-    CUDA.@sync @cuda backend=ct blocks=(cld(M, TM), cld(N, TN)) gemm_mxfp8(
+    CUDACore.@sync @cuda backend=ct blocks=(cld(M, TM), cld(N, TN)) gemm_mxfp8(
         elements(X),
         @rearrange(parent(scales(X)), "k1 m2 m1 k0 m0 -> (k1 m2 m1) k0 m0"),
         elements(Y),

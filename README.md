@@ -8,4 +8,4 @@
 Array types for the [OCP Microscaling Formats (MX)](https://www.opencompute.org/documents/ocp-microscaling-formats-mx-v1-0-spec-final-pdf):
 
 - `BlockscaledArray` pairs elements of any type with per-block scales; compose with `NarrowArray` to pack sub-byte elements
-- `Sm1xxArray` presents the swizzled scale layout used by SM 1xx (Blackwell) tensor cores.
+- `SwizzledArray` presents storage rearranged by an Einops pattern at its logical shape; `swizzle(x, :f8_4x128)` — shorthand `f8_4x128(x)` — produces the 128×4 tiled scale layout Blackwell tensor cores read, zero-padding to whole tiles by default.

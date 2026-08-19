@@ -1,14 +1,14 @@
 module cuBLASLtExt
 
 using Microscaling:
-    Sm1xxArray,
+    F8_4x128Array,
     Float8_E4M3FN, Float8_E8M0FNU,
     BlockscaledArray,
     block_size, scale_type, elements, scales
 
 import cuBLASLt
 
-cuBLASLt.ltptr(A::Sm1xxArray) = cuBLASLt.ltptr(parent(A))
+cuBLASLt.ltptr(A::F8_4x128Array) = cuBLASLt.ltptr(parent(A))
 
 cuBLASLt.ltdata(A::BlockscaledArray) = elements(A)
 cuBLASLt.ltscale(A::BlockscaledArray) = scales(A)
@@ -50,7 +50,7 @@ end
 # itself: mislaid scales are silently misread, or read out of bounds. Each
 # mode's memory contract is enforced here instead.
 #
-# The MX modes read through a swizzled 128×4-entry tiled layout; an Sm1xxArray
+# The MX modes read through a swizzled 128×4-entry tiled layout; an F8_4x128Array
 # is swizzled and tile-padded by construction. The Hopper f32 modes read plain
 # arrays, but with fixed orientations (cuBLAS docs, "Scaling factors
 # layouts"): :vec128_f32 scales are OUTER-major — memory shape outer × K÷128,
@@ -61,9 +61,9 @@ end
 # is exactly why a mislaid array cannot be caught by shape alone.
 function check_scale_layout(x, mode::Symbol)
     if mode in (:vec32_ue8m0, :vec16_ue4m3)
-        x isa Sm1xxArray || throw(ArgumentError(
+        x isa F8_4x128Array || throw(ArgumentError(
             "cuBLASLt accesses :$mode scales through a swizzled tiled layout, " *
-            "but the scales are a $(nameof(typeof(x))); wrap them with `sm1xx`"))
+            "but the scales are a $(nameof(typeof(x))); wrap them with `f8_4x128`"))
     elseif mode === :vec128_f32
         outer_major = (size(x, 2) == 1 || stride(x, 2) == 1) &&
                       (size(x, 1) == 1 || stride(x, 1) == size(x, 2))

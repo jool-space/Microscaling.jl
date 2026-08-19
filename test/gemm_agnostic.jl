@@ -23,7 +23,7 @@ Random.seed!(1)
                 (32, Float8_E8M0FNU, Float8_E4M3FN),
                 (32, Float8_E8M0FNU, Float4_E2M1FN),
                 (16, Float8_E4M3FN, Float4_E2M1FN)),
-             scale_wrapper in (identity, sm1xx)
+             scale_wrapper in (identity, f8_4x128)
 
     K_s = K ÷ block_size
 
@@ -49,9 +49,9 @@ Random.seed!(1)
     # Y as K×N, with the TN layout carried by the wrapper.
     X = PermutedDimsArray(BlockscaledArray(X_scales, X_elements), (2, 1))
     Y = BlockscaledArray(Y_scales, Y_elements)
-    Z = CUDA.zeros(Float32, M, N)
+    Z = CUDACore.zeros(Float32, M, N)
 
-    CUDA.@sync @cuda backend=ct blocks=(cld(M, TM), cld(N, TN)) gemm_agnostic(
+    CUDACore.@sync @cuda backend=ct blocks=(cld(M, TM), cld(N, TN)) gemm_agnostic(
         X, Y, Z, ct.Constant(TM), ct.Constant(TN), ct.Constant(TK),
     )
 
