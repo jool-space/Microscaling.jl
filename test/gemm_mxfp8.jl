@@ -38,8 +38,8 @@ end
 
     Z_ref = blockscaled_gemm_reference(x_data, x_scale, y_data, y_scale, block_size)
 
-    X = BlockscaledArray(sm1xx(CuArray(x_scale)), CuArray(x_data))
-    Y = BlockscaledArray(sm1xx(CuArray(y_scale)), CuArray(y_data))
+    X = BlockscaledArray(f8_4x128(CuArray(x_scale)), CuArray(x_data))
+    Y = BlockscaledArray(f8_4x128(CuArray(y_scale)), CuArray(y_data))
     Z = CUDACore.zeros(Float32, M, N)
 
     CUDACore.@sync @cuda backend=ct blocks=(cld(M, TM), cld(N, TN)) gemm_mxfp8(

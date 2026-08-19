@@ -23,7 +23,7 @@ Random.seed!(1)
                 (32, Float8_E8M0FNU, Float8_E4M3FN),
                 (32, Float8_E8M0FNU, Float4_E2M1FN),
                 (16, Float8_E4M3FN, Float4_E2M1FN)),
-             scale_wrapper in (identity, sm1xx)
+             scale_wrapper in (identity, f8_4x128)
 
     K_s = K ÷ block_size
 

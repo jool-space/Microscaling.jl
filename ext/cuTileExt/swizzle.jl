@@ -1,27 +1,28 @@
-using Microscaling
+using Microscaling: F8_4x128Array
 
 import cuTile as ct
 import Adapt
 using Einops: @reshape, @rearrange
 
-struct Sm1xxTileArray{T,N,A<:ct.TileArray{T}} <: ct.AbstractTileArray{T,N}
+struct F8_4x128TileArray{T,N,A<:ct.TileArray{T}} <: ct.AbstractTileArray{T,N}
     size::NTuple{N,Int}
     parent::A
 end
 
-Base.parent(s::Sm1xxTileArray) = s.parent
-Base.size(s::Sm1xxTileArray) = s.size
-Base.eltype(::Sm1xxTileArray{T}) where T = T
-Base.ndims(::Sm1xxTileArray{T,N}) where {T,N} = N
+Base.parent(s::F8_4x128TileArray) = s.parent
+Base.size(s::F8_4x128TileArray) = s.size
+Base.eltype(::F8_4x128TileArray{T}) where T = T
+Base.ndims(::F8_4x128TileArray{T,N}) where {T,N} = N
 
-function Adapt.adapt_structure(to::ct.KernelAdaptor, x::Sm1xxArray)
+function Adapt.adapt_structure(to::ct.KernelAdaptor,
+        x::F8_4x128Array{T,N,X}) where {T,N,X<:AbstractArray{T}}
     # for coalesced loads
     x′ = @reshape(parent(x), "k1 m2 m1 k0 m0 ... -> (k1 m2 m1) k0 m0 ...")
-    return Sm1xxTileArray(size(x), Adapt.adapt(to, x′))
+    return F8_4x128TileArray(size(x), Adapt.adapt(to, x′))
 end
 
 function ct.load(
-    arr::Sm1xxTileArray,
+    arr::F8_4x128TileArray,
     index, shape; kws...
 )
     k1, m2, m1 = 4, 4, 32
@@ -37,7 +38,7 @@ function ct.load(
 end
 
 function ct.store(
-    arr::Sm1xxTileArray,
+    arr::F8_4x128TileArray,
     index, tile;
     kws...
 )

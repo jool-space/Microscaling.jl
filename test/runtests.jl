@@ -1,6 +1,8 @@
 using Microscaling
 using Microscaling: Float8_E4M3FN, Float8_E5M2, Float8_E8M0FNU, Float4_E2M1FN
 using Microscaling: elements, scales, block_size, scale_type, element_type
+using Microscaling: F8_4x128Array
+using Einops               # -->, and the .. ellipsis (not importable by name)
 using Test
 
 using CUDACore
@@ -26,7 +28,7 @@ end
 
 @testset "Microscaling.jl" begin
     include("blockscaling.jl")
-    include("sm1xx.jl")
+    include("swizzle.jl")
 
     if CUDACore.functional()
         # the cuTile gemms lean on Blackwell (narrow-type loads, tcgen05
