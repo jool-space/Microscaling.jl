@@ -49,9 +49,9 @@ Random.seed!(1)
     # Y as K×N, with the TN layout carried by the wrapper.
     X = PermutedDimsArray(BlockscaledArray(X_scales, X_elements), (2, 1))
     Y = BlockscaledArray(Y_scales, Y_elements)
-    Z = CUDA.zeros(Float32, M, N)
+    Z = CUDACore.zeros(Float32, M, N)
 
-    CUDA.@sync @cuda backend=ct blocks=(cld(M, TM), cld(N, TN)) gemm_agnostic(
+    CUDACore.@sync @cuda backend=ct blocks=(cld(M, TM), cld(N, TN)) gemm_agnostic(
         X, Y, Z, ct.Constant(TM), ct.Constant(TN), ct.Constant(TK),
     )
 

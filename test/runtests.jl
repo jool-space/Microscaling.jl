@@ -3,7 +3,7 @@ using Microscaling: Float8_E4M3FN, Float8_E5M2, Float8_E8M0FNU, Float4_E2M1FN
 using Microscaling: elements, scales, block_size, scale_type, element_type
 using Test
 
-using CUDA
+using CUDACore
 using cuBLASLt
 import cuTile as ct
 using Random
@@ -28,15 +28,16 @@ end
     include("blockscaling.jl")
     include("sm1xx.jl")
 
-    if CUDA.functional()
+    if CUDACore.functional()
         # the cuTile gemms lean on Blackwell (narrow-type loads, tcgen05
         # block-scaled MMA); gemm_cublaslt.jl carries its own capability gates
-        if CUDA.capability(CUDA.device()) >= v"10.0"
+        if CUDACore.capability(CUDACore.device()) >= v"10.0"
             include("gemm_agnostic.jl")
             include("gemm_mxfp8.jl")
         else
             @info "skipping cuTile gemm testsets (CC ≥ 10.0 required)"
         end
         include("gemm_cublaslt.jl")
+        include("gemm_cudnn.jl")
     end
 end
