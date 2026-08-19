@@ -6,3 +6,4 @@ Microscaling = "1a9757c6-0d28-4499-b7bb-62d38933090b"
 
 [compat]
 Documenter = "1.17.0"
+Microfloats = "0.2.5"
