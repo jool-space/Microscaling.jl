@@ -13,12 +13,16 @@ end
 
 Random.seed!(1)
 
-@testset for (M, N, K) in (
-                (128, 128, 128),
-                (256, 384, 512)),
-             (TM, TN, TK) in (
-                (128, 128, 128),
-                (128, 256, 128)),
+# (M, N, K) × tile shapes: whole-tile scale requests, then sub-tile ones — a
+# 64-row M tile, activation-like N of 16 and 1, a 64-wide K step (2 scale
+# columns), and a decoder-sized K
+@testset for ((M, N, K), (TM, TN, TK)) in (
+                ((128, 128, 128), (128, 128, 128)),
+                ((256, 384, 512), (128, 128, 128)),
+                ((256, 384, 512), (128, 256, 128)),
+                ((64, 128, 256), (64, 128, 128)),
+                ((128, 16, 256), (128, 16, 128)),
+                ((128, 1, 256), (128, 1, 128))),
              (block_size, Scale, Element) in (
                 (32, Float8_E8M0FNU, Float8_E4M3FN),
                 (32, Float8_E8M0FNU, Float4_E2M1FN),

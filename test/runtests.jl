@@ -32,6 +32,7 @@ end
         # the cuTile gemms lean on Blackwell (narrow-type loads, tcgen05
         # block-scaled MMA); gemm_cublaslt.jl carries its own capability gates
         if CUDACore.capability(CUDACore.device()) >= v"10.0"
+            include("cutile_swizzle.jl")
             include("gemm_agnostic.jl")
             include("gemm_mxfp8.jl")
         else
