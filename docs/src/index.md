@@ -46,7 +46,7 @@ ArrowPattern(::SwizzledArray)
 
 ## Number formats
 
-MX-relevant types from [Microfloats.jl](https://github.com/jool-space/Microfloats.jl), available as `Microscaling.Float8_E4M3FN` etc.
+MX-relevant types from [Microfloats.jl](https://github.com/MurrellGroup/Microfloats.jl), available as `Microscaling.Float8_E4M3FN` etc.
 
 ```@docs
 Microfloat
@@ -60,7 +60,7 @@ Float8_E8M0FNU
 
 ## Packed storage
 
-Sub-byte element storage from [BitPacking.jl](https://github.com/jool-space/BitPacking.jl), available as `Microscaling.NarrowArray` etc.
+Sub-byte element storage from [BitPacking.jl](https://github.com/MurrellGroup/BitPacking.jl), available as `Microscaling.NarrowArray` etc.
 
 ```@docs
 NarrowArray
