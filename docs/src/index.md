@@ -32,13 +32,15 @@ element_type
 Blackwell block-scaled matmuls read scale factors through a hardware tiled
 layout ("128×4 tiled" in NVIDIA's docs, `F8_128x4` in cuDNN, Sm1xx in
 CUTLASS); [`swizzle`](@ref) rearranges dense scale arrays into such layouts
-and presents them at their logical shape.
+and presents them at their logical shape, zero-padding up to whole tiles by
+default (`pad=false` refuses non-tiling shapes instead).
 
 ```@docs
 SwizzledArray
 swizzle
 f8_4x128
 F8_4x128Array
+padded_size
 ArrowPattern(::SwizzledArray)
 ```
 

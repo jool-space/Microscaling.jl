@@ -1,4 +1,4 @@
-using Microscaling: F8_4x128Array
+using Microscaling: Microscaling, F8_4x128Array
 
 import cuTile as ct
 import Adapt
@@ -16,6 +16,10 @@ Base.ndims(::F8_4x128TileArray{T,N}) where {T,N} = N
 
 function Adapt.adapt_structure(to::ct.KernelAdaptor,
         x::F8_4x128Array{T,N,X}) where {T,N,X<:AbstractArray{T}}
+    # the load/store shapes below are computed from the logical size, so a
+    # tile-padded array would misindex its storage — refuse loudly for now
+    Microscaling.padded_size(x) == size(x) || throw(ArgumentError(
+        "tile-padded swizzled scales are not supported in cuTile kernels yet"))
     # for coalesced loads
     x′ = @reshape(parent(x), "k1 m2 m1 k0 m0 ... -> (k1 m2 m1) k0 m0 ...")
     return F8_4x128TileArray(size(x), Adapt.adapt(to, x′))

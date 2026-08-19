@@ -9,6 +9,8 @@ using Republic
     Float4_E2M1FN,                # MXFP4
     Float8_E8M0FNU                # MX scale
 
+using Pol: release!
+
 @republic using BitPacking:
     Narrow, bitwidth,
     NarrowArray, NarrowVector, NarrowMatrix
@@ -19,8 +21,8 @@ public elements, scales
 public block_size, scale_type, element_type
 
 include("swizzle.jl")
-export SwizzledArray, swizzle, f8_4x128
-public F8_4x128Array, SWIZZLES, ArrowPattern
+export SwizzledArray, swizzle, swizzle!, f8_4x128
+public F8_4x128Array, SWIZZLES, ArrowPattern, padded_size
 
 # deprecated aliases (the layout's former CUTLASS-derived name)
 Base.@deprecate_binding Sm1xxArray F8_4x128Array
