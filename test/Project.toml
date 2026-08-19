@@ -16,5 +16,6 @@ cuTile = "0dea8319-8c4a-4662-a73d-20234d115b9a"
 
 [compat]
 BFloat16s = "0.6.1"
+Einops = "0.2.2"
 CUDACore = "6.3"
 NNlib = "0.9.38"
