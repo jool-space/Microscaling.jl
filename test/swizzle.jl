@@ -166,10 +166,10 @@
         @test_throws ArgumentError swizzle!(D, rand(Float32, 8, 256))
     end
 
-    @testset "as blockscaled scales" begin
+    @testset "as block-scaled scales" begin
         elements = Float8_E4M3FN.(randn(Float32, 256, 256))
         scales = Float8_E8M0FNU.(2.0f0 .^ rand(-2:2, 8, 256))
-        A = BlockscaledArray(swizzle(scales, :f8_4x128), elements)
+        A = BlockScaledArray(swizzle(scales, :f8_4x128), elements)
 
         @test block_size(A) == (32, 1)
         @test A == dequantize(scales, elements, (32, 1))

@@ -3,17 +3,17 @@ module cuBLASLtExt
 using Microscaling:
     F8_4x128Array,
     Float8_E4M3FN, Float8_E8M0FNU,
-    BlockscaledArray,
+    BlockScaledArray,
     block_size, scale_type, elements, scales
 
 import cuBLASLt
 
 cuBLASLt.ltptr(A::F8_4x128Array) = cuBLASLt.ltptr(parent(A))
 
-cuBLASLt.ltdata(A::BlockscaledArray) = elements(A)
-cuBLASLt.ltscale(A::BlockscaledArray) = scales(A)
+cuBLASLt.ltdata(A::BlockScaledArray) = elements(A)
+cuBLASLt.ltscale(A::BlockScaledArray) = scales(A)
 
-function cuBLASLt.scale_mode(A::BlockscaledArray{<:Any,N}) where {N}
+function cuBLASLt.scale_mode(A::BlockScaledArray{<:Any,N}) where {N}
     2 <= N <= 3 || throw(ArgumentError(
         "cuBLASLt matmul takes matrices or 3-dimensional batches; got $(N)D"))
     mode = _scale_mode(block_size(A), scale_type(A))

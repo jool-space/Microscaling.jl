@@ -28,10 +28,10 @@ if CC >= v"10.0"  # Blackwell: MXFP8/NVFP4 block-scaled formats
         w_scale = Scale.(rand(K_s, M))
         x_scale = Scale.(rand(K_s, N))
 
-        C_ref = blockscaled_gemm_reference(w_data, w_scale, x_data, x_scale, block)
+        C_ref = block_scaled_gemm_reference(w_data, w_scale, x_data, x_scale, block)
 
-        W = BlockscaledArray(f8_4x128(CuArray(w_scale)), CuArray(w_data))
-        X = BlockscaledArray(f8_4x128(CuArray(x_scale)), CuArray(x_data))
+        W = BlockScaledArray(f8_4x128(CuArray(w_scale)), CuArray(w_data))
+        X = BlockScaledArray(f8_4x128(CuArray(x_scale)), CuArray(x_data))
         C = CUDACore.zeros(Float32, M, N)
 
         @test cuBLASLt.matmul_supported(C, transpose(W), X)
@@ -55,10 +55,10 @@ end
     w_scale = Scale.(rand(K_s, M))
     x_scale = Scale.(rand(K_s, N))
 
-    C_ref = blockscaled_gemm_reference(w_data, w_scale, x_data, x_scale, block)
+    C_ref = block_scaled_gemm_reference(w_data, w_scale, x_data, x_scale, block)
 
-    W = BlockscaledArray(f8_4x128(CuArray(w_scale)), CuArray(w_data))
-    X = BlockscaledArray(f8_4x128(CuArray(x_scale)), CuArray(x_data))
+    W = BlockScaledArray(f8_4x128(CuArray(w_scale)), CuArray(w_data))
+    X = BlockScaledArray(f8_4x128(CuArray(x_scale)), CuArray(x_data))
 
     @testset "α=$α, β=$β" for (α, β) in ((2.0f0, 0.0f0), (1.0f0, 1.0f0), (0.5f0, 0.5f0))
         C_prev = CuArray(rand(Float32, M, N))
@@ -84,10 +84,10 @@ end
     w_scale = Scale.(rand(K_s, M))
     x_scale = Scale.(rand(K_s, N))
 
-    C_ref = blockscaled_gemm_reference(w_data, w_scale, x_data, x_scale, block)
+    C_ref = block_scaled_gemm_reference(w_data, w_scale, x_data, x_scale, block)
 
-    W = BlockscaledArray(f8_4x128(CuArray(w_scale)), CuArray(w_data))
-    X = BlockscaledArray(f8_4x128(CuArray(x_scale)), CuArray(x_data))
+    W = BlockScaledArray(f8_4x128(CuArray(w_scale)), CuArray(w_data))
+    X = BlockScaledArray(f8_4x128(CuArray(x_scale)), CuArray(x_data))
 
     @testset "α=$αv, β=$βv (device, device)" for (αv, βv) in ((1.0f0, 0.0f0), (2.0f0, 0.0f0), (0.5f0, 0.5f0))
         α = CuArray(fill(αv))
@@ -115,10 +115,10 @@ end
     w_scale = Scale.(rand(K_s, M) / √K)
     x_scale = Scale.(rand(K_s, N) / √K)
 
-    C_ref = blockscaled_gemm_reference(w_data, w_scale, x_data, x_scale, block)
+    C_ref = block_scaled_gemm_reference(w_data, w_scale, x_data, x_scale, block)
 
-    W = BlockscaledArray(f8_4x128(CuArray(w_scale)), CuArray(w_data))
-    X = BlockscaledArray(f8_4x128(CuArray(x_scale)), CuArray(x_data))
+    W = BlockScaledArray(f8_4x128(CuArray(w_scale)), CuArray(w_data))
+    X = BlockScaledArray(f8_4x128(CuArray(x_scale)), CuArray(x_data))
 
     @testset "Dtype=$Dtype" for Dtype in (Float32, Float16, BFloat16)
         C = CUDACore.zeros(Dtype, M, N)
@@ -142,10 +142,10 @@ end
     w_scale = Scale.(rand(K_s, M) / √K)
     x_scale = Scale.(rand(K_s, N) / √K)
 
-    C_ref = blockscaled_gemm_reference(w_data, w_scale, x_data, x_scale, block)
+    C_ref = block_scaled_gemm_reference(w_data, w_scale, x_data, x_scale, block)
 
-    W = BlockscaledArray(f8_4x128(CuArray(w_scale)), CuArray(w_data))
-    X = BlockscaledArray(f8_4x128(CuArray(x_scale)), CuArray(x_data))
+    W = BlockScaledArray(f8_4x128(CuArray(w_scale)), CuArray(w_data))
+    X = BlockScaledArray(f8_4x128(CuArray(x_scale)), CuArray(x_data))
 
     @testset "Dtype=$Dtype" for Dtype in (Float32, Float16, BFloat16)
         C = CUDACore.zeros(Dtype, M, N)
@@ -174,10 +174,10 @@ end
         w_scale = Scale.(rand(K_s, M))
         x_scale = Scale.(rand(K_s, N))
 
-        C_ref = blockscaled_gemm_reference(w_data, w_scale, x_data, x_scale, block)
+        C_ref = block_scaled_gemm_reference(w_data, w_scale, x_data, x_scale, block)
 
-        W = BlockscaledArray(f8_4x128(CuArray(w_scale)), NarrowArray{Element}(CuArray(w_data)))
-        X = BlockscaledArray(f8_4x128(CuArray(x_scale)), NarrowArray{Element}(CuArray(x_data)))
+        W = BlockScaledArray(f8_4x128(CuArray(w_scale)), NarrowArray{Element}(CuArray(w_data)))
+        X = BlockScaledArray(f8_4x128(CuArray(x_scale)), NarrowArray{Element}(CuArray(x_data)))
         C = CUDACore.zeros(Float32, M, N)
 
         @test cuBLASLt.matmul_supported(C, transpose(W), X)
@@ -201,10 +201,10 @@ end
     w_scale = Scale.(rand(K_s, M) / √K)
     x_scale = Scale.(rand(K_s, N) / √K)
 
-    C_ref = blockscaled_gemm_reference(w_data, w_scale, x_data, x_scale, block)
+    C_ref = block_scaled_gemm_reference(w_data, w_scale, x_data, x_scale, block)
 
-    W = BlockscaledArray(f8_4x128(CuArray(w_scale)), NarrowArray{Element}(CuArray(w_data)))
-    X = BlockscaledArray(f8_4x128(CuArray(x_scale)), NarrowArray{Element}(CuArray(x_data)))
+    W = BlockScaledArray(f8_4x128(CuArray(w_scale)), NarrowArray{Element}(CuArray(w_data)))
+    X = BlockScaledArray(f8_4x128(CuArray(x_scale)), NarrowArray{Element}(CuArray(x_data)))
 
     @testset "Dtype=$Dtype" for Dtype in (Float32, Float16, BFloat16)
         C = CUDACore.zeros(Dtype, M, N)
@@ -230,13 +230,13 @@ end
     x_scale = Scale.(rand(K_s, N, batch))
 
     D_ref = stack(1:batch) do b
-        blockscaled_gemm_reference(
+        block_scaled_gemm_reference(
             w_data[:,:,b], w_scale[:,:,b],
             x_data[:,:,b], x_scale[:,:,b], block)
     end
 
-    W = BlockscaledArray(f8_4x128(CuArray(w_scale)), CuArray(w_data))
-    X = BlockscaledArray(f8_4x128(CuArray(x_scale)), CuArray(x_data))
+    W = BlockScaledArray(f8_4x128(CuArray(w_scale)), CuArray(w_data))
+    X = BlockScaledArray(f8_4x128(CuArray(x_scale)), CuArray(x_data))
 
     @testset "$label" for (label, Wt) in (
         "batched_transpose" => batched_transpose(W),
@@ -269,8 +269,8 @@ if CC >= v"8.9"  # Ada and later: FP8 with tensorwide scalar scales
     C_ref = Float32.(w_data) .* w_scale[1]
     C_ref = transpose(C_ref) * (Float32.(x_data) .* x_scale[1])
 
-    W = BlockscaledArray{Float32}(CuArray(reshape(w_scale, 1, 1)), CuArray(w_data), (:, :))
-    X = BlockscaledArray{Float32}(CuArray(reshape(x_scale, 1, 1)), CuArray(x_data), (:, :))
+    W = BlockScaledArray{Float32}(CuArray(reshape(w_scale, 1, 1)), CuArray(w_data), (:, :))
+    X = BlockScaledArray{Float32}(CuArray(reshape(x_scale, 1, 1)), CuArray(x_data), (:, :))
     C = CUDACore.zeros(Float32, M, N)
 
     @test cuBLASLt.matmul_supported(C, transpose(W), X)
@@ -307,10 +307,10 @@ outer_major(scale) = transpose(CuArray(permutedims(scale)))
         w_scale = Float32.(rand(K_s, M) / √K)
         x_scale = Float32.(rand(K_s, N) / √K)
 
-        C_ref = blockscaled_gemm_reference(w_data, w_scale, x_data, x_scale, block)
+        C_ref = block_scaled_gemm_reference(w_data, w_scale, x_data, x_scale, block)
 
-        W = BlockscaledArray{Float32}(outer_major(w_scale), CuArray(w_data))
-        X = BlockscaledArray{Float32}(outer_major(x_scale), CuArray(x_data))
+        W = BlockScaledArray{Float32}(outer_major(w_scale), CuArray(w_data))
+        X = BlockScaledArray{Float32}(outer_major(x_scale), CuArray(x_data))
         C = CUDACore.zeros(Float32, M, N)
 
         @test cuBLASLt.matmul_supported(C, transpose(W), X)
@@ -333,11 +333,11 @@ end
     w_scale = Float32.(rand(K_s, M_s) / √K)
     x_scale = Float32.(rand(K_s, N) / √K)
 
-    C_ref = blockscaled_gemm_reference(w_data, w_scale, x_data, x_scale, 128;
+    C_ref = block_scaled_gemm_reference(w_data, w_scale, x_data, x_scale, 128;
         x_block_size=(128, 128), y_block_size=128)
 
-    W = BlockscaledArray{Float32}(CuArray(w_scale), CuArray(w_data), (128, 128))
-    X = BlockscaledArray{Float32}(outer_major(x_scale), CuArray(x_data))
+    W = BlockScaledArray{Float32}(CuArray(w_scale), CuArray(w_data), (128, 128))
+    X = BlockScaledArray{Float32}(outer_major(x_scale), CuArray(x_data))
     C = CUDACore.zeros(Float32, M, N)
 
     @test cuBLASLt.matmul_supported(C, transpose(W), X)
@@ -366,10 +366,10 @@ if v"9.0" <= CC < v"10.0"
     w_scale = Float32.(rand(1, M) / √K)
     x_scale = Float32.(rand(1, N) / √K)
 
-    C_ref = blockscaled_gemm_reference(w_data, w_scale, x_data, x_scale, (K, 1))
+    C_ref = block_scaled_gemm_reference(w_data, w_scale, x_data, x_scale, (K, 1))
 
-    W = BlockscaledArray{Float32}(CuArray(w_scale), CuArray(w_data), (:, 1))
-    X = BlockscaledArray{Float32}(CuArray(x_scale), CuArray(x_data), (:, 1))
+    W = BlockScaledArray{Float32}(CuArray(w_scale), CuArray(w_data), (:, 1))
+    X = BlockScaledArray{Float32}(CuArray(x_scale), CuArray(x_data), (:, 1))
     C = CUDACore.zeros(Float32, M, N)
 
     @test cuBLASLt.matmul_supported(C, transpose(W), X)
@@ -400,8 +400,8 @@ if v"10.0" <= CC < v"12.0" && cuBLASLt.version() >= v"13.1"
             (transpose(Float32.(w_data[:, :, b])) * Float32.(x_data[:, :, b]))
     end
 
-    W = BlockscaledArray{Float32}(CuArray(w_scale), CuArray(w_data), (:, :, 1))
-    X = BlockscaledArray{Float32}(CuArray(x_scale), CuArray(x_data), (:, :, 1))
+    W = BlockScaledArray{Float32}(CuArray(w_scale), CuArray(w_data), (:, :, 1))
+    X = BlockScaledArray{Float32}(CuArray(x_scale), CuArray(x_data), (:, :, 1))
     D = CUDACore.zeros(Float32, M, N, batch)
 
     @test cuBLASLt.matmul_supported(D, batched_transpose(W), X)
@@ -426,13 +426,13 @@ end
     w_data  = CuArray(Element.(randn(K, M)))
     x_data  = CuArray(Element.(randn(K, N)))
 
-    W = BlockscaledArray(f8_4x128(w_scale), w_data)
+    W = BlockScaledArray(f8_4x128(w_scale), w_data)
     @test cuBLASLt.scale_mode(W) == :vec32_ue8m0
 
     # raw (unswizzled) scale arrays must be refused before they reach the
     # library, which would silently misread them through its tiled layout
-    W_raw = BlockscaledArray(w_scale, w_data)
-    X_raw = BlockscaledArray(x_scale, x_data)
+    W_raw = BlockScaledArray(w_scale, w_data)
+    X_raw = BlockScaledArray(x_scale, x_data)
     @test_throws ArgumentError cuBLASLt.scale_mode(W_raw)
     C = CUDACore.zeros(Float32, M, N)
     @test_throws ArgumentError cuBLASLt.matmul!(C, transpose(W_raw), X_raw)
@@ -446,40 +446,40 @@ end
     data(dims...) = CuArray(Element.(randn(dims...)))
 
     # one Float32 scale per outer element (channelwise/rowwise)
-    W = BlockscaledArray{Float32}(CuArray(rand(Float32, 1, M)), data(K, M), (:, 1))
+    W = BlockScaledArray{Float32}(CuArray(rand(Float32, 1, M)), data(K, M), (:, 1))
     @test cuBLASLt.scale_mode(W) == :outer_vec_f32
 
     # one Float32 scalar per batch entry
-    Wb = BlockscaledArray{Float32}(CuArray(rand(Float32, 1, 1, batch)),
+    Wb = BlockScaledArray{Float32}(CuArray(rand(Float32, 1, 1, batch)),
                                    data(K, M, batch), (:, :, 1))
     @test cuBLASLt.scale_mode(Wb) == :per_batch_scalar_f32
 
     # a tensorwide scalar spans the batch dimension too
-    Wt = BlockscaledArray{Float32}(CuArray(rand(Float32, 1, 1, 1)),
+    Wt = BlockScaledArray{Float32}(CuArray(rand(Float32, 1, 1, 1)),
                                    data(K, M, batch), (:, :, :))
     @test cuBLASLt.scale_mode(Wt) == :scalar_f32
 
     # batched per-matrix modes must repeat their scales per batch entry
-    W_shared = BlockscaledArray{Float32}(CuArray(Scale.(rand(K ÷ 32, M, 1))),
+    W_shared = BlockScaledArray{Float32}(CuArray(Scale.(rand(K ÷ 32, M, 1))),
                                          data(K, M, batch), (32, 1, :))
     @test_throws ArgumentError cuBLASLt.scale_mode(W_shared)
 
     # a scalar blocking the batch by anything but 1 or : is meaningless
-    W_pair = BlockscaledArray{Float32}(CuArray(rand(Float32, 1, 1, batch ÷ 2)),
+    W_pair = BlockScaledArray{Float32}(CuArray(rand(Float32, 1, 1, batch ÷ 2)),
                                        data(K, M, batch), (:, :, 2))
     @test_throws ArgumentError cuBLASLt.scale_mode(W_pair)
 
     # outer-vec scales must be Float32
-    W_bad = BlockscaledArray{Float32}(CuArray(Scale.(rand(1, M))), data(K, M), (:, 1))
+    W_bad = BlockScaledArray{Float32}(CuArray(Scale.(rand(1, M))), data(K, M), (:, 1))
     @test_throws ArgumentError cuBLASLt.scale_mode(W_bad)
 
     # scale types with no cuBLASLt mode are refused, not MethodError'd
-    W_e5 = BlockscaledArray{Float32}(CuArray(Float8_E5M2.(rand(K ÷ 32, M))),
+    W_e5 = BlockScaledArray{Float32}(CuArray(Float8_E5M2.(rand(K ÷ 32, M))),
                                      data(K, M), (32, 1))
     @test_throws ArgumentError cuBLASLt.scale_mode(W_e5)
 
     # cuBLASLt matmul has no layout for 4D and beyond
-    W4 = BlockscaledArray{Float32}(CuArray(rand(Float32, 1, M, 2, 2)),
+    W4 = BlockScaledArray{Float32}(CuArray(rand(Float32, 1, M, 2, 2)),
                                    data(K, M, 2, 2), (:, 1, 1, 1))
     @test_throws ArgumentError cuBLASLt.scale_mode(W4)
 
@@ -488,18 +488,18 @@ end
     # (K÷128, outer) geometry — so a plain K-major array must be refused;
     # the two layouts only coincide for K ≤ 128
     Kb, Mb = 256, 256
-    W_vec = BlockscaledArray{Float32}(transpose(CuArray(rand(Float32, Mb, 2))),
+    W_vec = BlockScaledArray{Float32}(transpose(CuArray(rand(Float32, Mb, 2))),
                                       data(Kb, Mb))
     @test cuBLASLt.scale_mode(W_vec) == :vec128_f32
-    W_kmaj = BlockscaledArray{Float32}(CuArray(rand(Float32, 2, Mb)), data(Kb, Mb))
+    W_kmaj = BlockScaledArray{Float32}(CuArray(rand(Float32, 2, Mb)), data(Kb, Mb))
     @test_throws ArgumentError cuBLASLt.scale_mode(W_kmaj)
 
     # :blk128x128_f32 scales are K-major with the K÷128 dimension padded to a
     # multiple of 4: a view into padded storage passes, unpadded is refused
-    W_pad = BlockscaledArray{Float32}(view(CuArray(rand(Float32, 4, 2)), 1:2, :),
+    W_pad = BlockScaledArray{Float32}(view(CuArray(rand(Float32, 4, 2)), 1:2, :),
                                       data(Kb, Mb), (128, 128))
     @test cuBLASLt.scale_mode(W_pad) == :blk128x128_f32
-    W_nopad = BlockscaledArray{Float32}(CuArray(rand(Float32, 2, 2)),
+    W_nopad = BlockScaledArray{Float32}(CuArray(rand(Float32, 2, 2)),
                                         data(Kb, Mb), (128, 128))
     @test_throws ArgumentError cuBLASLt.scale_mode(W_nopad)
 end

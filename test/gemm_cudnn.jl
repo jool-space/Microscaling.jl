@@ -4,7 +4,7 @@ using cuDNN: Graph, tensor, tensor!, matmul!, execute!, is_supported,
 
 @assert !isnothing(Base.get_extension(Microscaling, :cuDNNExt))
 
-# The Microscaling cuDNN extension is hooks-only: `tensor!(g, ::BlockscaledArray)`
+# The Microscaling cuDNN extension is hooks-only: `tensor!(g, ::BlockScaledArray)`
 # adds a block-scaled operand (element + swizzled scale tensors + dequantize node)
 # to a graph at the array's own rank, and bindings take the storage components —
 # `elements(A)` for the element tensor, `scales(A)` for the scale tensor. Nothing lifts ranks:
@@ -17,7 +17,7 @@ batch1(a) = reshape(a, size(a)..., 1)   # append an explicit batch-1 axis
 gpu_elements(a) = eltype(a) === Float4_E2M1FN ?
     NarrowArray{Float4_E2M1FN}(CuArray(a)) : CuArray(a)
 
-function blockscaled_matmul_graph(W, X, Dtype)
+function block_scaled_matmul_graph(W, X, Dtype)
     K, M, batch = size(elements(W))
     N = size(elements(X), 2)
     Wt = PermutedDimsArray(W, (2, 1, 3))
@@ -30,7 +30,7 @@ function blockscaled_matmul_graph(W, X, Dtype)
 end
 
 # C may be 2-D: binding compares memory layouts with singleton dims dropped
-function blockscaled_matmul!(C, g, W, X)
+function block_scaled_matmul!(C, g, W, X)
     execute!(g, tensor(g, "A.element") => elements(W), tensor(g, "A.scale") => scales(W),
                 tensor(g, "B.element") => elements(X), tensor(g, "B.scale") => scales(X),
                 tensor(g, "C") => C)
@@ -62,16 +62,16 @@ cudnn_blockscale_claimed = CC >= v"10.0" && cuDNN.functional()
         w_scale = Scale.(rand(K_s, M))
         x_scale = Scale.(rand(K_s, N))
 
-        C_ref = blockscaled_gemm_reference(w_element, w_scale, x_element, x_scale, block)
+        C_ref = block_scaled_gemm_reference(w_element, w_scale, x_element, x_scale, block)
 
-        W = BlockscaledArray(f8_4x128(CuArray(batch1(w_scale))), CuArray(batch1(w_element)))
-        X = BlockscaledArray(f8_4x128(CuArray(batch1(x_scale))), CuArray(batch1(x_element)))
+        W = BlockScaledArray(f8_4x128(CuArray(batch1(w_scale))), CuArray(batch1(w_element)))
+        X = BlockScaledArray(f8_4x128(CuArray(batch1(x_scale))), CuArray(batch1(x_element)))
         C = CUDACore.zeros(Float32, M, N)
 
-        g = blockscaled_matmul_graph(W, X, Float32)
+        g = block_scaled_matmul_graph(W, X, Float32)
         @test is_supported(g) == cudnn_blockscale_claimed
         if cudnn_blockscale_claimed
-            blockscaled_matmul!(C, g, W, X)
+            block_scaled_matmul!(C, g, W, X)
             @test isapprox(Array(C), C_ref; rtol = 1e-5, atol = 1e-5)
         end
     end
@@ -91,16 +91,16 @@ end
     w_scale = Scale.(rand(K_s, M) / √K)
     x_scale = Scale.(rand(K_s, N) / √K)
 
-    C_ref = blockscaled_gemm_reference(w_element, w_scale, x_element, x_scale, block)
+    C_ref = block_scaled_gemm_reference(w_element, w_scale, x_element, x_scale, block)
 
-    W = BlockscaledArray(f8_4x128(CuArray(batch1(w_scale))), CuArray(batch1(w_element)))
-    X = BlockscaledArray(f8_4x128(CuArray(batch1(x_scale))), CuArray(batch1(x_element)))
+    W = BlockScaledArray(f8_4x128(CuArray(batch1(w_scale))), CuArray(batch1(w_element)))
+    X = BlockScaledArray(f8_4x128(CuArray(batch1(x_scale))), CuArray(batch1(x_element)))
 
     @testset "Dtype=$Dtype" for Dtype in (Float32, Float16, BFloat16)
         C = CUDACore.zeros(Dtype, M, N)
-        g = blockscaled_matmul_graph(W, X, Dtype)
+        g = block_scaled_matmul_graph(W, X, Dtype)
         if is_supported(g)
-            blockscaled_matmul!(C, g, W, X)
+            block_scaled_matmul!(C, g, W, X)
             @test isapprox(Float32.(Array(C)), C_ref; rtol = 1e-2, atol = 1e-2)
         else
             @test_skip cudnn_blockscale_claimed
@@ -127,16 +127,16 @@ end
     w_scale = Scale.(rand(K_s, M))
     x_scale = Scale.(rand(K_s, N))
 
-    C_ref = blockscaled_gemm_reference(w_element, w_scale, x_element, x_scale, block)
+    C_ref = block_scaled_gemm_reference(w_element, w_scale, x_element, x_scale, block)
 
-    W = BlockscaledArray(f8_4x128(CuArray(batch1(w_scale))), gpu_elements(batch1(w_element)))
-    X = BlockscaledArray(f8_4x128(CuArray(batch1(x_scale))), gpu_elements(batch1(x_element)))
+    W = BlockScaledArray(f8_4x128(CuArray(batch1(w_scale))), gpu_elements(batch1(w_element)))
+    X = BlockScaledArray(f8_4x128(CuArray(batch1(x_scale))), gpu_elements(batch1(x_element)))
     C = CUDACore.zeros(Float32, M, N)
 
-    g = blockscaled_matmul_graph(W, X, Float32)
+    g = block_scaled_matmul_graph(W, X, Float32)
     @test is_supported(g) == cudnn_blockscale_claimed
     if cudnn_blockscale_claimed
-        blockscaled_matmul!(C, g, W, X)
+        block_scaled_matmul!(C, g, W, X)
         @test isapprox(Array(C), C_ref; rtol = 1e-4, atol = 1e-4)
     end
 end
@@ -158,7 +158,7 @@ end
     w_scale = Scale.(rand(K_s, M))
     x_scale = Scale.(rand(K_s, N))
 
-    D_ref = blockscaled_gemm_reference(w_element, w_scale, x_element, x_scale, block)
+    D_ref = block_scaled_gemm_reference(w_element, w_scale, x_element, x_scale, block)
 
     Ws = swizzle(CuArray(batch1(w_scale)), :f8_4x128)
     @test size(Ws) == (K_s, M, 1)
@@ -168,13 +168,13 @@ end
     Ws2 = SwizzledArray(similar(parent(Ws)), :f8_4x128; dims=(K_s, M))
     @test swizzle!(Ws2, CuArray(batch1(w_scale))) === Ws2
     @test Array(parent(Ws2)) == Array(parent(Ws))
-    W = BlockscaledArray(Ws, CuArray(batch1(w_element)))
-    X = BlockscaledArray(f8_4x128(CuArray(batch1(x_scale))), CuArray(batch1(x_element)))
+    W = BlockScaledArray(Ws, CuArray(batch1(w_element)))
+    X = BlockScaledArray(f8_4x128(CuArray(batch1(x_scale))), CuArray(batch1(x_element)))
     D = CUDACore.zeros(Float32, M, N)
 
-    g = blockscaled_matmul_graph(W, X, Float32)
+    g = block_scaled_matmul_graph(W, X, Float32)
     if is_supported(g)
-        blockscaled_matmul!(D, g, W, X)
+        block_scaled_matmul!(D, g, W, X)
         @test isapprox(Array(D), D_ref; rtol = 1e-5, atol = 1e-5)
     else
         @test_skip cudnn_blockscale_claimed
@@ -197,18 +197,18 @@ end
     x_scale = Scale.(rand(K_s, N, batch))
 
     D_ref = stack(1:batch) do b
-        blockscaled_gemm_reference(
+        block_scaled_gemm_reference(
             w_element[:,:,b], w_scale[:,:,b],
             x_element[:,:,b], x_scale[:,:,b], block)
     end
 
-    W = BlockscaledArray(f8_4x128(CuArray(w_scale)), CuArray(w_element))
-    X = BlockscaledArray(f8_4x128(CuArray(x_scale)), CuArray(x_element))
+    W = BlockScaledArray(f8_4x128(CuArray(w_scale)), CuArray(w_element))
+    X = BlockScaledArray(f8_4x128(CuArray(x_scale)), CuArray(x_element))
     D = CUDACore.zeros(Float32, M, N, batch)
 
-    g = blockscaled_matmul_graph(W, X, Float32)
+    g = block_scaled_matmul_graph(W, X, Float32)
     if is_supported(g)
-        blockscaled_matmul!(D, g, W, X)
+        block_scaled_matmul!(D, g, W, X)
         @test isapprox(Array(D), D_ref; rtol = 1e-5, atol = 1e-5)
     else
         @test_skip cudnn_blockscale_claimed
@@ -235,12 +235,12 @@ end
     x_scale = Scale.(rand(K_s, N, batch))
 
     D_ref = stack(1:batch) do b
-        blockscaled_gemm_reference(
+        block_scaled_gemm_reference(
             w_element, w_scale, x_element[:,:,b], x_scale[:,:,b], block)
     end
 
-    W = BlockscaledArray(f8_4x128(CuArray(batch1(w_scale))), CuArray(batch1(w_element)))
-    X = BlockscaledArray(f8_4x128(CuArray(x_scale)), CuArray(x_element))
+    W = BlockScaledArray(f8_4x128(CuArray(batch1(w_scale))), CuArray(batch1(w_element)))
+    X = BlockScaledArray(f8_4x128(CuArray(x_scale)), CuArray(x_element))
     D = CUDACore.zeros(Float32, M, N, batch)
 
     g = Graph(io_dtype=Float32, intermediate_dtype=Float32, compute_dtype=Float32)
@@ -252,7 +252,7 @@ end
     # measured supported on sm_121 / cuDNN 9.24
     @test is_supported(g) == cudnn_blockscale_claimed
     if cudnn_blockscale_claimed
-        blockscaled_matmul!(D, g, W, X)
+        block_scaled_matmul!(D, g, W, X)
         @test isapprox(Array(D), D_ref; rtol = 1e-5, atol = 1e-5)
     end
 end
@@ -260,7 +260,7 @@ end
 @testset "cuDNN MXFP8 — fused matmul→quantize pipeline" begin
     # the full MXFP8 pipeline in one graph: dequantize both operands, matmul
     # into a virtual f32 tensor, and quantize it back to MXFP8 (elements +
-    # swizzled scales written straight into a BlockscaledArray). The
+    # swizzled scales written straight into a BlockScaledArray). The
     # dequantized result must reproduce the f32 gemm within block-quantization
     # error; wrong scale bytes (a mislaid swizzle) miss by powers of two, so
     # the loose tolerance still catches layout errors.
@@ -277,10 +277,10 @@ end
     w_scale = Scale.(rand(K_s, M) / √K)
     x_scale = Scale.(rand(K_s, N) / √K)
 
-    C_ref = blockscaled_gemm_reference(w_element, w_scale, x_element, x_scale, block)
+    C_ref = block_scaled_gemm_reference(w_element, w_scale, x_element, x_scale, block)
 
-    W = BlockscaledArray(f8_4x128(CuArray(batch1(w_scale))), CuArray(batch1(w_element)))
-    X = BlockscaledArray(f8_4x128(CuArray(batch1(x_scale))), CuArray(batch1(x_element)))
+    W = BlockScaledArray(f8_4x128(CuArray(batch1(w_scale))), CuArray(batch1(w_element)))
+    X = BlockScaledArray(f8_4x128(CuArray(batch1(x_scale))), CuArray(batch1(x_element)))
 
     g = Graph(intermediate_dtype=Float32, compute_dtype=Float32)
     a = tensor!(g, PermutedDimsArray(W, (2, 1, 3)); name="A")
@@ -291,7 +291,7 @@ end
 
     # quantized output blocks along M (dimension 1), feeding a next gemm that
     # reduces over M; scales land in the swizzled layout
-    D = BlockscaledArray(
+    D = BlockScaledArray(
         F8_4x128Array(CuArray{Scale}(undef, 4, 4, 32, (M ÷ block) ÷ 4, N ÷ 128)),
         CuArray{Element}(undef, M, N))
 
@@ -326,7 +326,7 @@ end
     Element = Float8_E4M3FN
     M, N, K = 128, 128, 128
 
-    W = BlockscaledArray(f8_4x128(CuArray(Scale.(rand(K ÷ 32, M)))),
+    W = BlockScaledArray(f8_4x128(CuArray(Scale.(rand(K ÷ 32, M)))),
                          CuArray(Element.(randn(K, M))))
 
     # tensors are declared at the array's own rank: a 2-D operand stays rank 2
@@ -351,7 +351,7 @@ end
     @test_throws ArgumentError tensor!(g5, W; name="E", rank=1)
 
     # rank is not capped to matmul's 3: block scaling is not just for matmul
-    W4 = BlockscaledArray(f8_4x128(CuArray(Scale.(rand(K ÷ 32, M, 2, 3)))),
+    W4 = BlockScaledArray(f8_4x128(CuArray(Scale.(rand(K ÷ 32, M, 2, 3)))),
                           CuArray(Element.(randn(K, M, 2, 3))))
     g4 = Graph()
     c = tensor!(g4, W4; name="C")
@@ -367,25 +367,25 @@ end
 
     # raw (unswizzled) scale arrays must be refused before they reach the
     # library, which would silently misread them through its tiled layout
-    W_raw = BlockscaledArray(CuArray(Scale.(rand(K ÷ 32, M))),
+    W_raw = BlockScaledArray(CuArray(Scale.(rand(K ÷ 32, M))),
                              CuArray(Element.(randn(K, M))))
     @test_throws ArgumentError tensor!(g, W_raw; name="A")
 
     # scale types with no cuDNN block-scale mode are refused, not MethodError'd
-    W_f32 = BlockscaledArray{Float32}(CuArray(rand(Float32, 1, M)),
+    W_f32 = BlockScaledArray{Float32}(CuArray(rand(Float32, 1, M)),
                                       CuArray(Element.(randn(K, M))), (:, 1))
     @test_throws ArgumentError tensor!(g, W_f32; name="A")
 
     # UE8M0 recipes are block-32 only: block-16 e8m0 graphs never get an
     # engine (verified across output types and shapes), so refuse up front
-    W16 = BlockscaledArray(f8_4x128(CuArray(Float8_E8M0FNU.(rand(K ÷ 16, M)))),
+    W16 = BlockScaledArray(f8_4x128(CuArray(Float8_E8M0FNU.(rand(K ÷ 16, M)))),
                            NarrowArray{Float4_E2M1FN}(CuArray(Float4_E2M1FN.(randn(K, M)))))
     @test_throws ArgumentError tensor!(g, W16; name="A")
 
     # mismatched inner dimensions surface from the graph matmul
-    W = BlockscaledArray(f8_4x128(CuArray(batch1(Scale.(rand(K ÷ 32, M))))),
+    W = BlockScaledArray(f8_4x128(CuArray(batch1(Scale.(rand(K ÷ 32, M))))),
                          CuArray(batch1(Element.(randn(K, M)))))
-    X_mismatch = BlockscaledArray(f8_4x128(CuArray(batch1(Scale.(rand(2K ÷ 32, M))))),
+    X_mismatch = BlockScaledArray(f8_4x128(CuArray(batch1(Scale.(rand(2K ÷ 32, M))))),
                                   CuArray(batch1(Element.(randn(2K, M)))))
     g2 = Graph()
     a = tensor!(g2, PermutedDimsArray(W, (2, 1, 3)); name="A")
@@ -394,7 +394,7 @@ end
 
     # 2-D operands declare rank-2 tensors, which cuDNN matmul rejects — the
     # batch axis is the caller's to add
-    W2 = BlockscaledArray(f8_4x128(CuArray(Scale.(rand(K ÷ 32, M)))),
+    W2 = BlockScaledArray(f8_4x128(CuArray(Scale.(rand(K ÷ 32, M)))),
                           CuArray(Element.(randn(K, M))))
     g3 = Graph()
     a2 = tensor!(g3, PermutedDimsArray(W2, (2, 1)); name="A")

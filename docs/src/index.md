@@ -14,12 +14,12 @@ Registry.add(url="https://registry.jool.space")
 Pkg.add("Microscaling")
 ```
 
-## Blockscaled arrays
+## Block-scaled arrays
 
 ```@docs
-BlockscaledArray
-BlockscaledVector
-BlockscaledMatrix
+BlockScaledArray
+BlockScaledVector
+BlockScaledMatrix
 scales
 elements
 block_size

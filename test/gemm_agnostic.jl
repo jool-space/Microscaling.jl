@@ -36,7 +36,7 @@ Random.seed!(1)
     x_scale = Scale.(rand(K_s, M))
     y_scale = Scale.(rand(K_s, N))
 
-    Z_ref = blockscaled_gemm_reference(x_data, x_scale, y_data, y_scale, block_size)
+    Z_ref = block_scaled_gemm_reference(x_data, x_scale, y_data, y_scale, block_size)
 
     X_scales = scale_wrapper(CuArray(x_scale))
     Y_scales = scale_wrapper(CuArray(y_scale))
@@ -51,8 +51,8 @@ Random.seed!(1)
 
     # Storage is K-major for both operands; the kernel sees X as M×K and
     # Y as K×N, with the TN layout carried by the wrapper.
-    X = PermutedDimsArray(BlockscaledArray(X_scales, X_elements), (2, 1))
-    Y = BlockscaledArray(Y_scales, Y_elements)
+    X = PermutedDimsArray(BlockScaledArray(X_scales, X_elements), (2, 1))
+    Y = BlockScaledArray(Y_scales, Y_elements)
     Z = CUDACore.zeros(Float32, M, N)
 
     CUDACore.@sync @cuda backend=ct blocks=(cld(M, TM), cld(N, TN)) gemm_agnostic(

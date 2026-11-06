@@ -16,7 +16,7 @@ import Adapt
 dequantize(scales, elements, block) =
     Float32.(elements) .* repeat(Float32.(scales); inner = block)
 
-function blockscaled_gemm_reference(x_data, x_scale, y_data, y_scale, block_size;
+function block_scaled_gemm_reference(x_data, x_scale, y_data, y_scale, block_size;
                                     x_block_size=block_size, y_block_size=block_size)
     _bs(b) = b isa Tuple ? b : (b, 1)
     dqX = Float32.(x_data) .* Float32.(repeat(x_scale, inner = _bs(x_block_size)))

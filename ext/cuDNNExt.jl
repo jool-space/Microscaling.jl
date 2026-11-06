@@ -3,7 +3,7 @@ module cuDNNExt
 using Microscaling:
     F8_4x128Array, SwizzledArray, NarrowArray, padded_size,
     Float8_E4M3FN, Float8_E5M2, Float8_E8M0FNU, Float4_E2M1FN,
-    BlockscaledArray,
+    BlockScaledArray,
     block_size, scale_type, element_type, elements, scales
 
 using cuDNN:
@@ -16,7 +16,7 @@ blockstr(t::Tuple) = "(" * join((b isa Colon ? ":" : b for b in t), ",") * ")"
 # (32-element blocks, UE8M0 scales) and NVFP4 (16-element blocks, UE4M3
 # scales) — all blocking the innermost storage dimension; the cuBLASLt-only
 # Float32 modes have no cuDNN equivalent.
-function mx_block_size(A::BlockscaledArray)
+function mx_block_size(A::BlockScaledArray)
     blk = block_size(A)
     k = blk[1]
     all(==(1), Base.tail(blk)) || throw(ArgumentError(
@@ -55,18 +55,18 @@ end
 # lifts them by trailing singleton dimensions (free in column-major storage),
 # for callers that keep every tensor of a graph at one uniform rank. cuDNN's
 # matmul takes rank-3 `(rows, cols, batch)` operands, so gemm operands are 3-D
-# BlockscaledArrays with K in dimension 1 (batch extent 1 for a plain gemm),
+# BlockScaledArrays with K in dimension 1 (batch extent 1 for a plain gemm),
 # and the `a` operand of `matmul!` — which wants M first — is passed as
 # `PermutedDimsArray(A, (2, 1, 3))`.
 #
 # On `execute!`, bind the storage components: `elements(A)` to the element
 # tensor and `scales(A)` to the scale tensor.
-cuDNN.tensor!(g::Graph, A::BlockscaledArray{<:Any,N};
+cuDNN.tensor!(g::Graph, A::BlockScaledArray{<:Any,N};
               name::String="", rank::Integer=N) where {N} =
     block_scale_tensors!(g, A, ntuple(identity, N); name, rank)
 
 cuDNN.tensor!(g::Graph,
-              Ap::PermutedDimsArray{<:Any,N,perm,<:Any,<:BlockscaledArray{<:Any,N}};
+              Ap::PermutedDimsArray{<:Any,N,perm,<:Any,<:BlockScaledArray{<:Any,N}};
               name::String="", rank::Integer=N) where {N,perm} =
     block_scale_tensors!(g, parent(Ap), perm; name, rank)
 
@@ -75,7 +75,7 @@ lift(dims, strides, rank) = (
     (strides..., ntuple(_ -> max(prod(dims), 1), rank - length(dims))...),
 )
 
-function block_scale_tensors!(g::Graph, A::BlockscaledArray{<:Any,N},
+function block_scale_tensors!(g::Graph, A::BlockScaledArray{<:Any,N},
                               perm::NTuple{N,Int}; name::String,
                               rank::Integer=N) where {N}
     rank >= N || throw(ArgumentError(

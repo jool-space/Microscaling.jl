@@ -14,7 +14,7 @@ using Republic
     NarrowArray, NarrowVector, NarrowMatrix
 
 include("blockscaling.jl")
-export BlockscaledArray, BlockscaledVector, BlockscaledMatrix
+export BlockScaledArray, BlockScaledVector, BlockScaledMatrix
 public elements, scales
 public block_size, scale_type, element_type
 
@@ -27,5 +27,11 @@ public SWIZZLES, ArrowPattern, padded_size
 Base.@deprecate_binding Sm1xxArray F8_4x128Array
 Base.@deprecate sm1xx(x::AbstractArray) f8_4x128(x)
 export Sm1xxArray, sm1xx
+
+# deprecated aliases (block-scaled is two words)
+Base.@deprecate_binding BlockscaledArray BlockScaledArray
+Base.@deprecate_binding BlockscaledVector BlockScaledVector
+Base.@deprecate_binding BlockscaledMatrix BlockScaledMatrix
+export BlockscaledArray, BlockscaledVector, BlockscaledMatrix
 
 end

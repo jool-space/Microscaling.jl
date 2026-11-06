@@ -29,7 +29,7 @@ Base.size(arr::PermutedTileArray{T,N,perm}, d::Integer) where {T,N,perm} =
     size(parent(arr), perm[d])
 
 function Adapt.adapt_structure(to::ct.KernelAdaptor,
-        arr::PermutedDimsArray{T,N,perm,<:Any,<:BlockscaledArray{T,N}}) where {T,N,perm}
+        arr::PermutedDimsArray{T,N,perm,<:Any,<:BlockScaledArray{T,N}}) where {T,N,perm}
     return PermutedTileArray(Adapt.adapt(to, parent(arr)), perm)
 end
 
