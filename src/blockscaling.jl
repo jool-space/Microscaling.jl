@@ -2,8 +2,8 @@ using Adapt
 using Rewrap: Unsqueeze, Keep, Split, Merge
 
 """
-    BlockscaledArray{T}(scale, element, block_size = size(element) .÷ size(scale))
-    BlockscaledArray(scale, element, args...)
+    BlockScaledArray{T}(scale, element, block_size = size(element) .÷ size(scale))
+    BlockScaledArray(scale, element, args...)
 
 An `AbstractArray{T,N}` pairing an `element` array with a `scale` array,
 where each scale applies to one block of elements. Indexing returns
@@ -15,7 +15,7 @@ shares a scale. Without `T`, the element type is promoted from
 `eltype(scale)` and `eltype(element)` (`Float32` if the promotion is
 abstract).
 """
-struct BlockscaledArray{
+struct BlockScaledArray{
     T<:Number, N, K<:NTuple{N,Any},
     S<:AbstractArray{<:Number,N}, E<:AbstractArray{<:Number,N},
 } <: AbstractArray{T,N}
@@ -23,12 +23,12 @@ struct BlockscaledArray{
     element::E
 end
 
-function BlockscaledArray{T,N,K}(scale::S, element::E) where {
+function BlockScaledArray{T,N,K}(scale::S, element::E) where {
     T<:Number, N, K<:NTuple{N,Any},
     S<:AbstractArray{<:Number,N}, E<:AbstractArray{<:Number,N}
 }
     validate_block_size(Tuple(K.parameters), size(scale), size(element))
-    return BlockscaledArray{T,N,K,S,E}(scale, element)
+    return BlockScaledArray{T,N,K,S,E}(scale, element)
 end
 
 function validate_block_size(block_size, scale_size, element_size)
@@ -47,13 +47,13 @@ function validate_block_size(block_size, scale_size, element_size)
     end
 end
 
-function BlockscaledArray{T}(
+function BlockScaledArray{T}(
     scale::AbstractArray{<:Number,N},
     element::AbstractArray{<:Number,N},
     block_size::NTuple{N,Union{Int,Colon}} = size(element) .÷ size(scale)
 ) where {T,N}
     K = Tuple{block_size...}
-    return BlockscaledArray{T,N,K}(scale, element)
+    return BlockScaledArray{T,N,K}(scale, element)
 end
 
 function promote_eltype(scale::AbstractArray, element::AbstractArray)
@@ -61,67 +61,67 @@ function promote_eltype(scale::AbstractArray, element::AbstractArray)
     isabstracttype(T) ? Float32 : T
 end
 
-function BlockscaledArray(scale::AbstractArray, element::AbstractArray, args...; kws...)
-    return BlockscaledArray{promote_eltype(scale, element)}(scale, element, args...; kws...)
+function BlockScaledArray(scale::AbstractArray, element::AbstractArray, args...; kws...)
+    return BlockScaledArray{promote_eltype(scale, element)}(scale, element, args...; kws...)
 end
 
 """
-    elements(arr::BlockscaledArray)
+    elements(arr::BlockScaledArray)
 
 The element array, in which each element belongs to a block sharing one scale.
 """
-elements(arr::BlockscaledArray) = arr.element
+elements(arr::BlockScaledArray) = arr.element
 
 """
-    scales(arr::BlockscaledArray)
+    scales(arr::BlockScaledArray)
 
 The scale array, holding one scale per block of elements.
 """
-scales(arr::BlockscaledArray) = arr.scale
+scales(arr::BlockScaledArray) = arr.scale
 
-Base.size(arr::BlockscaledArray, args...) = size(elements(arr), args...)
+Base.size(arr::BlockScaledArray, args...) = size(elements(arr), args...)
 
 """
-    block_size(arr::BlockscaledArray[, i])
+    block_size(arr::BlockScaledArray[, i])
 
 The block extent along each dimension, as a tuple of `Int`s and `Colon`s —
 or just its `i`-th entry.
 """
-block_size(::BlockscaledArray{T,N,K}) where {T,N,K} = Tuple(K.parameters)
-block_size(arr::BlockscaledArray, i::Integer) = block_size(arr)[i]
+block_size(::BlockScaledArray{T,N,K}) where {T,N,K} = Tuple(K.parameters)
+block_size(arr::BlockScaledArray, i::Integer) = block_size(arr)[i]
 
 """
-    scale_type(arr::BlockscaledArray)
+    scale_type(arr::BlockScaledArray)
 
 The element type of the scale array.
 """
-scale_type(arr::BlockscaledArray) = eltype(scales(arr))
+scale_type(arr::BlockScaledArray) = eltype(scales(arr))
 
 """
-    element_type(arr::BlockscaledArray)
+    element_type(arr::BlockScaledArray)
 
 The element type of the element array.
 """
-element_type(arr::BlockscaledArray) = eltype(elements(arr))
+element_type(arr::BlockScaledArray) = eltype(elements(arr))
 
-Base.IndexStyle(::Type{<:BlockscaledArray}) = IndexCartesian()
+Base.IndexStyle(::Type{<:BlockScaledArray}) = IndexCartesian()
 
 function Adapt.adapt_structure(
-    to, arr::BlockscaledArray{T,N,K}
+    to, arr::BlockScaledArray{T,N,K}
 ) where {T,N,K}
     scale = adapt(to, scales(arr))
     element = adapt(to, elements(arr))
-    return BlockscaledArray{T,N,K}(scale, element)
+    return BlockScaledArray{T,N,K}(scale, element)
 end
 
 # Allocate plain (dense) output in the SAME storage as the element data, so
-# `similar(arr, T, dims)` on a GPU-backed BlockscaledArray yields a GPU array
+# `similar(arr, T, dims)` on a GPU-backed BlockScaledArray yields a GPU array
 # rather than Base's default CPU `Array`. Reductions/maps rely on this for the
 # destination buffer.
-Base.similar(arr::BlockscaledArray, ::Type{T}, dims::Dims) where {T} =
+Base.similar(arr::BlockScaledArray, ::Type{T}, dims::Dims) where {T} =
     similar(elements(arr), T, dims)
 
-function Base.getindex(arr::BlockscaledArray{T,N}, i::Vararg{Int,N}) where {T,N}
+function Base.getindex(arr::BlockScaledArray{T,N}, i::Vararg{Int,N}) where {T,N}
     @boundscheck checkbounds(arr, i...)
     iₚ = i
     iₓ = ntuple(Val(N)) do j
@@ -141,20 +141,20 @@ function Base.getindex(arr::BlockscaledArray{T,N}, i::Vararg{Int,N}) where {T,N}
 end
 
 """
-    BlockscaledVector{T}
+    BlockScaledVector{T}
 
-Alias for [`BlockscaledArray`](@ref)`{T,1}`.
+Alias for [`BlockScaledArray`](@ref)`{T,1}`.
 """
-const BlockscaledVector{T} = BlockscaledArray{T,1}
+const BlockScaledVector{T} = BlockScaledArray{T,1}
 
 """
-    BlockscaledMatrix{T}
+    BlockScaledMatrix{T}
 
-Alias for [`BlockscaledArray`](@ref)`{T,2}`.
+Alias for [`BlockScaledArray`](@ref)`{T,2}`.
 """
-const BlockscaledMatrix{T} = BlockscaledArray{T,2}
+const BlockScaledMatrix{T} = BlockScaledArray{T,2}
 
-function Base.copy(arr::BlockscaledArray{T,N}) where {T,N}
+function Base.copy(arr::BlockScaledArray{T,N}) where {T,N}
     scale_singleton = reshape(T.(scales(arr)), ntuple(i -> isodd(i) ? Unsqueeze() : Keep(), Val(2N)))
     element_shape = ntuple(Val(N)) do i
         k = block_size(arr, i)
@@ -168,6 +168,6 @@ end
 
 ### Broadcasting
 
-Base.broadcastable(arr::BlockscaledArray) = copy(arr)
+Base.broadcastable(arr::BlockScaledArray) = copy(arr)
 
-Base.print_array(io::IO, arr::BlockscaledArray) = Base.print_array(io, copy(arr))
+Base.print_array(io::IO, arr::BlockScaledArray) = Base.print_array(io, copy(arr))
