@@ -15,6 +15,7 @@ cuDNN = "02a925ec-e4fe-4b08-9a7e-0d78e3d38ccd"
 cuTile = "0dea8319-8c4a-4662-a73d-20234d115b9a"
 
 [compat]
+Adapt = "4.7.1"
 BFloat16s = "0.6.1"
 Einops = "0.2.2"
 CUDACore = "6.3"
